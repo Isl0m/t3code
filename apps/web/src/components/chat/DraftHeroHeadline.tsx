@@ -51,6 +51,7 @@ import { InlineButton } from "../ui/button";
 import { DraftProjectName } from "./DraftProjectName";
 import { DraftHeroProjectHeading } from "./DraftHeroProjectHeading";
 import { TriageDraftHero } from "./TriageDraftHero";
+import { DraftThreadGroupSelect } from "../groups/DraftThreadGroupSelect";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { resolveProjectDefaultProviderModelSelection } from "../../providerInstances";
 import { resolveNewThreadModelSelection } from "@t3tools/shared/usageLimits";
@@ -421,6 +422,15 @@ export function DraftHeroHeadline({
           {isScratchDraft ? projectSelector : orStartWithoutProject}
         </p>
       )}
+      {draftId !== null && activeProject !== null && !isScratchDraft ? (
+        <div className="pointer-events-auto mt-1 flex justify-center">
+          <DraftThreadGroupSelect
+            draftId={draftId}
+            environmentId={activeProject.environmentId}
+            projectId={activeProject.id}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

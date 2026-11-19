@@ -12,6 +12,9 @@ import {
   buildPrContentPrompt,
   buildReviewGuidePrompt,
   buildThreadTitlePrompt,
+  matchThreadGroup,
+  ThreadTitleOutput,
+  ThreadTitleWithGroupOutput,
 } from "./textGenerationPrompts.ts";
 import {
   sanitizeCommitSubject,
@@ -150,24 +153,32 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
   const generateThreadTitle: ProviderTextGeneration["generateThreadTitle"] = Effect.fn(
     `${name}.generateThreadTitle`,
   )(function* (input) {
-    const generated = yield* run({
-      operation: "generateThreadTitle",
+    const { prompt } = buildThreadTitlePrompt({
+      message: input.message,
+      projectTitle: input.projectTitle,
+      previousTitle: input.previousTitle,
+      forkSource: input.forkSource,
+      linkedContext: input.linkedContext,
+      attachments: input.attachments,
+      instructions: input.instructions,
+      groups: input.groups,
+    });
+    const request = {
+      operation: "generateThreadTitle" as const,
       cwd: input.cwd,
       modelSelection: input.modelSelection,
       attachments: input.attachments,
-      ...buildThreadTitlePrompt({
-        message: input.message,
-        projectTitle: input.projectTitle,
-        previousTitle: input.previousTitle,
-        forkSource: input.forkSource,
-        linkedContext: input.linkedContext,
-        attachments: input.attachments,
-        instructions: input.instructions,
-      }),
-    });
+      prompt,
+    };
+    const generated =
+      (input.groups?.length ?? 0) > 0
+        ? yield* run({ ...request, outputSchema: ThreadTitleWithGroupOutput })
+        : { ...(yield* run({ ...request, outputSchema: ThreadTitleOutput })), group: null };
+    const group = matchThreadGroup(input.groups, generated.group);
     return {
       title: yield* generatedThreadTitle(generated.title),
       ...(generated.needsRefinement ? { needsRefinement: true } : {}),
+      ...(group === undefined ? {} : { group }),
     };
   });
 

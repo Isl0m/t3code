@@ -41,6 +41,7 @@ import {
   readThreadGroupsPreferences,
   saveThreadGroupsPreferences,
 } from "./threadGroupsPreferences";
+import { useProjectThreadGroups } from "./useProjectThreadGroups";
 
 // Columns render this many rows; search narrows the rest, so a 1,000-thread column stays cheap.
 const COLUMN_ROW_LIMIT = 100;
@@ -106,6 +107,7 @@ export function ThreadGroupsPage() {
   const threads = useQuietThreadShells();
   const delegatedUnderParent = useDelegatedUnderParent();
   const { projectByKey } = useProjectLookups();
+  const projectThreadGroups = useProjectThreadGroups();
   const settle = useAtomCommand(threadEnvironment.settle);
   const unsettle = useAtomCommand(threadEnvironment.unsettle);
   const pin = useAtomCommand(threadEnvironment.pin);
@@ -137,6 +139,9 @@ export function ThreadGroupsPage() {
     mode: preferences.mode,
     showSettled: preferences.showSettled,
     query,
+    configuredGroups: [...projectByKey.values()].flatMap(
+      (project) => projectThreadGroups(project.environmentId, project.id).groups,
+    ),
   });
   const at = resolveThreadGroupsCursor(columns, cursor);
   const selectedColumn = at === null ? null : (columns[at.column] ?? null);

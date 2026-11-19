@@ -6,6 +6,7 @@ import {
   type GroupableThread,
   moveThreadGroupsCursor,
   normalizeThreadGroupName,
+  normalizeThreadGroups,
   UNGROUPED_COLUMN_KEY,
 } from "./threadGroups.logic";
 
@@ -37,6 +38,15 @@ describe("normalizeThreadGroupName", () => {
   });
 });
 
+describe("normalizeThreadGroups", () => {
+  it("keeps configured order, dropping blanks and repeats", () => {
+    expect(normalizeThreadGroups([" Bugs ", "", "Admin", "Bugs", "a".repeat(65)])).toEqual([
+      "Bugs",
+      "Admin",
+    ]);
+  });
+});
+
 describe("buildThreadGroupColumns", () => {
   const threads = [
     thread({ key: "old", tags: ["routes"], activityAt: 1 }),
@@ -60,6 +70,20 @@ describe("buildThreadGroupColumns", () => {
     ]);
     expect(columns.at(-1)?.key).toBe(UNGROUPED_COLUMN_KEY);
     expect(columns.at(-1)?.tag).toBeNull();
+  });
+
+  it("gives configured groups a column before any thread joins them", () => {
+    const columns = buildThreadGroupColumns({
+      threads: [thread({ key: "loose" })],
+      mode: "group",
+      showSettled: false,
+      query: "",
+      configuredGroups: ["Bugs"],
+    });
+    expect(columns.map((column) => [column.label, keys(column.threads)])).toEqual([
+      ["Bugs", []],
+      ["Ungrouped", ["loose"]],
+    ]);
   });
 
   it("keeps a group's column when the search empties it", () => {

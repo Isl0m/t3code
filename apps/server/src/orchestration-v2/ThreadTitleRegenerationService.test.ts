@@ -54,6 +54,7 @@ const adapter = {
 function makeHarness(
   options: {
     readonly generateTitle?: TextGeneration.TextGeneration["Service"]["generateThreadTitle"];
+    readonly settings?: Parameters<typeof ServerSettings.layerTest>[0];
   } = {},
 ) {
   const layerDatabase = SqlitePersistence.layerMemory;
@@ -63,7 +64,7 @@ function makeHarness(
     layerRegistry,
     { databaseLayer: layerDatabase, runEffectWorker: false },
   );
-  const layerServerSettings = ServerSettings.layerTest({});
+  const layerServerSettings = ServerSettings.layerTest(options.settings ?? {});
   const layerThreadManagement = ThreadManagement.layer.pipe(
     Layer.provide(layerOrchestrator),
     Layer.provide(layerServerSettings),
@@ -426,6 +427,52 @@ describe("ThreadTitleRegenerationService", () => {
           }).pipe(Effect.provide(harness.layer));
         }
       }),
+  );
+
+  it.effect("files a new thread into the group the title model picks unless it has one", () =>
+    Effect.gen(function* () {
+      for (const [key, preset, expectedGroups, expectedTags] of [
+        ["picked", [], ["Courier app", "Admin"], ["Courier app"]],
+        ["kept", ["Admin"], undefined, ["Admin"]],
+      ] as const) {
+        const harness = makeHarness({
+          settings: { threadGroups: ["Courier app", "Admin"], autoAssignThreadGroups: true },
+          generateTitle: () => Effect.succeed({ title: "Generated title", group: "Courier app" }),
+        });
+        yield* Effect.gen(function* () {
+          const threads = yield* ThreadManagement.ThreadManagementService;
+          const service = yield* ThreadTitleRegeneration.ThreadTitleRegenerationService;
+          const threadId = yield* createThread({
+            command: `group:${key}:create`,
+            thread: `group:${key}:thread`,
+          });
+          for (const tag of preset) {
+            yield* threads.dispatch({
+              type: "thread.tag.set",
+              commandId: CommandId.make(`group:${key}:preset`),
+              threadId,
+              tag,
+              tagged: true,
+            });
+          }
+          yield* dispatchUserMessage({
+            command: `group:${key}:message`,
+            threadId,
+            text: "Courier map shows stale orders",
+          });
+          const requestId = yield* armRegeneration({ command: `group:${key}:title`, threadId });
+          const messageId = MessageId.make(`group:${key}:message:message`);
+          yield* service.execute({ threadId, requestId, kind: { type: "initial", messageId } });
+          assert.deepEqual(
+            harness.generateThreadTitle.mock.calls[0]?.[0].groups,
+            expectedGroups,
+            key,
+          );
+          const projection = yield* threads.getThreadProjection(threadId);
+          assert.deepEqual(projection.thread.tags, expectedTags, key);
+        }).pipe(Effect.provide(harness.layer));
+      }
+    }),
   );
 
   it.effect("arms and clears the regeneration marker through metadata commands", () =>

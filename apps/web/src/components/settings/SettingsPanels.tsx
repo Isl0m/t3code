@@ -63,6 +63,7 @@ import { useOptionalSettingsScope, useSettingsScope } from "./SettingsScopeConte
 import { scopedIdleCompaction } from "./scopedSettings";
 import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
 import { ThreadTitleInstructionsSettings } from "./ThreadTitleInstructionsSettings";
+import { ThreadGroupsSettings } from "./ThreadGroupsSettings";
 import { SnoozePresetsRow } from "./SnoozePresetsSettings";
 import { useDesktopUpdateState } from "../../state/desktopUpdate";
 import { managedTelemetryOffMessage, usePrimaryManagedPolicy } from "../../state/managedPolicy";
@@ -1880,6 +1881,12 @@ export function ThreadsSettingsPanel() {
           }
         />
       </SettingsSection>
+
+      {hasServerTargets ? (
+        <SettingsSection id="thread-groups-section" title="Thread groups">
+          <ThreadGroupsSettings />
+        </SettingsSection>
+      ) : null}
 
       {hasServerTargets ? (
         <SettingsSection id="auto-settle" title="Auto-settle">

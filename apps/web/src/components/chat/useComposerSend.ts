@@ -105,6 +105,7 @@ import {
   referencedThreadContexts,
 } from "./composerSend.logic";
 import { useMultipleModelSend } from "./useMultipleModelSend";
+import { takeDraftThreadGroup } from "../groups/DraftThreadGroupSelect";
 import { type ComposerDispatchMode } from "@t3tools/client-runtime/state/composer-dispatch";
 import {
   getUploadedAttachments,
@@ -351,6 +352,7 @@ export function useComposerSend(input: ComposerSendInput) {
   const uploadThreadFeedback = useOrchestrationCommand(threadEnvironment.uploadFeedback, {
     reportFailure: false,
   });
+  const setThreadTag = useOrchestrationCommand(threadEnvironment.setTag);
   const setComposerDraftPrompt = useComposerDraftStore((store) => store.setPrompt);
   const clearComposerDraftContent = useComposerDraftStore((store) => store.clearComposerContent);
   const sendToMultipleModels = useMultipleModelSend({
@@ -1390,6 +1392,14 @@ export function useComposerSend(input: ComposerSendInput) {
         failure = startResult;
       } else {
         turnStartSucceeded = true;
+        const draftGroup =
+          isLocalDraftThread && draftId !== null ? takeDraftThreadGroup(draftId) : null;
+        if (draftGroup !== null) {
+          void setThreadTag({
+            environmentId,
+            input: { threadId: threadIdForSend, tag: draftGroup, tagged: true },
+          });
+        }
         if (checkoutPullRequestUrl) {
           linkCheckoutPullRequest(
             scopeThreadRef(environmentId, threadIdForSend),

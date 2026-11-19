@@ -17,6 +17,7 @@ import {
   threadGroupTags,
 } from "./threadGroups.logic";
 import { closeThreadGroupPicker, useThreadGroupPickerTarget } from "./threadGroupPickerStore";
+import { useProjectThreadGroups } from "./useProjectThreadGroups";
 
 export function ThreadGroupPickerHost() {
   const target = useThreadGroupPickerTarget((state) => state.target);
@@ -41,7 +42,13 @@ function ThreadGroupPicker({ target }: { readonly target: ScopedThreadRef }) {
   const thread = useQuietThreadShell(target);
   const threads = useQuietThreadShells();
   const setTag = useAtomCommand(threadEnvironment.setTag);
-  const groups = collectThreadGroups(threads.map((entry) => ({ tags: threadGroupTags(entry) })));
+  const projectThreadGroups = useProjectThreadGroups();
+  const projectGroups =
+    thread === null ? [] : projectThreadGroups(target.environmentId, thread.projectId).groups;
+  const otherGroups = collectThreadGroups(
+    threads.map((entry) => ({ tags: threadGroupTags(entry) })),
+  ).filter((group) => !projectGroups.includes(group));
+  const groups = [...projectGroups, ...otherGroups];
   const current = new Set(thread === null ? [] : threadGroupTags(thread));
   const newName = normalizeThreadGroupName(query);
   const toggle = (tag: string, tagged: boolean) =>
@@ -69,7 +76,11 @@ function ThreadGroupPicker({ target }: { readonly target: ScopedThreadRef }) {
       value: `thread-group:${group}`,
       searchTerms: [group],
       title: group,
-      description: current.has(group) ? "Remove from this group" : undefined,
+      description: current.has(group)
+        ? "Remove from this group"
+        : projectGroups.includes(group)
+          ? "Project group"
+          : undefined,
       checked: current.has(group),
       icon: current.has(group) ? (
         <CheckIcon className={ITEM_ICON_CLASS} />

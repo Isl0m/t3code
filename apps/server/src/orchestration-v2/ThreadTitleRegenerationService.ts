@@ -10,6 +10,7 @@ import {
   type ServerSettingsError,
   TextGenerationError,
   type ThreadId,
+  ThreadTag,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -51,13 +52,29 @@ export class ThreadTitleRegenerationService extends Context.Service<
 >()("t3/orchestration-v2/ThreadTitleRegenerationService") {}
 
 type Outcome =
-  | { readonly status: "renamed"; readonly title: string }
-  | { readonly status: "unchanged" }
+  | { readonly status: "renamed"; readonly title: string; readonly group?: string }
+  | { readonly status: "unchanged"; readonly group?: string }
   | { readonly status: "failed"; readonly message: string };
 
 const MAX_FAILURE_MESSAGE_LENGTH = 300;
 const isTextGenerationError = Schema.is(TextGenerationError);
 const isProjectionStoreThreadNotFoundError = Schema.is(ProjectionStoreThreadNotFoundError);
+const isThreadTag = Schema.is(ThreadTag);
+
+/** Groups the model may pick from: only when auto-assign is on and the thread has none yet. */
+function autoAssignGroups(
+  settings: {
+    readonly threadGroups: ReadonlyArray<string>;
+    readonly autoAssignThreadGroups: boolean;
+  },
+  threadTags: ReadonlyArray<string> | undefined,
+): ReadonlyArray<string> {
+  if (!settings.autoAssignThreadGroups) return [];
+  const groups = [...new Set(settings.threadGroups.map((group) => group.trim()))].filter(
+    isThreadTag,
+  );
+  return groups.some((group) => threadTags?.includes(group) === true) ? [] : groups;
+}
 
 function failureMessage(cause: Cause.Cause<unknown>): string {
   const error = Cause.squash(cause);
@@ -149,6 +166,35 @@ const make = Effect.gen(function* () {
       : { title, history: context.message };
   });
 
+  // Re-read first: the user may have picked a group while the title was generating.
+  const assignGroup = Effect.fn("ThreadTitleRegenerationService.assignGroup")(function* (
+    threadId: ThreadId,
+    requestId: CommandId,
+    group: string,
+  ) {
+    const thread = yield* threads.getThreadShell(threadId);
+    if (thread === null) return;
+    const settings = resolveProjectSettings(
+      yield* serverSettings.getSettings,
+      thread.projectId,
+    ).settings;
+    if (autoAssignGroups(settings, thread.tags).length === 0) return;
+    yield* threads
+      .dispatch({
+        type: "thread.tag.set",
+        commandId: CommandId.make(`${requestId}:auto-group`),
+        threadId,
+        tag: group,
+        tagged: true,
+      })
+      .pipe(
+        Effect.asVoid,
+        Effect.catchCause((cause) =>
+          Effect.logWarning("Automatic thread group assignment failed", { threadId, cause }),
+        ),
+      );
+  });
+
   const execute: ThreadTitleRegenerationService["Service"]["execute"] = Effect.fn(
     "ThreadTitleRegenerationService.execute",
   )(function* (input) {
@@ -214,6 +260,7 @@ const make = Effect.gen(function* () {
         projection.thread.projectId,
       ).settings;
       // Storage cleanup removes worktrees but keeps the path; CLIs cannot spawn in a missing cwd.
+      const groups = autoAssignGroups(settings, projection.thread.tags);
       const worktreePath = projection.thread.worktreePath;
       const worktreeExists =
         worktreePath !== null &&
@@ -226,14 +273,17 @@ const make = Effect.gen(function* () {
         ...(input.kind.type === "regenerate" ? { previousTitle: projection.thread.title } : {}),
         ...(inherited === undefined ? {} : { forkSource: inherited }),
         instructions: settings.threadTitleInstructions,
+        ...(groups.length > 0 ? { groups } : {}),
         modelSelection: settings.textGenerationModelSelection,
         projectId: projection.thread.projectId,
       });
       const generatedTitle = result.title.trim();
+      const group =
+        result.group !== undefined && groups.includes(result.group) ? { group: result.group } : {};
       return generatedTitle === "New thread" ||
         (input.kind.type === "regenerate" && generatedTitle === projection.thread.title.trim())
-        ? { status: "unchanged" as const }
-        : { status: "renamed" as const, title: result.title };
+        ? { status: "unchanged" as const, ...group }
+        : { status: "renamed" as const, title: result.title, ...group };
     }).pipe(
       Effect.retry({
         times: input.kind.type === "initial" ? 2 : 0,
@@ -254,6 +304,9 @@ const make = Effect.gen(function* () {
       return;
     }
     yield* complete({ ...input, outcome });
+    if (outcome.status !== "failed" && outcome.group !== undefined) {
+      yield* assignGroup(input.threadId, input.requestId, outcome.group);
+    }
   });
 
   return ThreadTitleRegenerationService.of({ execute });

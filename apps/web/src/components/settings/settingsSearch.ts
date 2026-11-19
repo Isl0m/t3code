@@ -868,6 +868,20 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["generated thread titles prompt custom style naming rename regenerate"],
   },
   {
+    id: "thread-groups",
+    title: "Thread groups",
+    to: "/settings/threads",
+    scope: "project-defaults",
+    searchTerms: ["groups folders tags organize categories board kanban"],
+  },
+  {
+    id: "auto-assign-thread-groups",
+    title: "Assign groups automatically",
+    to: "/settings/threads",
+    scope: "project-defaults",
+    searchTerms: ["auto group ai classify categorize tag new threads"],
+  },
+  {
     id: "app-version",
     title: "Version",
     to: "/settings/about",

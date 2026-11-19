@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { buildThreadTitlePrompt } from "./textGenerationPrompts.ts";
+import { buildThreadTitlePrompt, matchThreadGroup } from "./textGenerationPrompts.ts";
 import { normalizeCliError } from "./textGenerationUtils.ts";
 
 describe("normalizeCliError", () => {
@@ -27,5 +27,23 @@ describe("buildThreadTitlePrompt", () => {
       });
       expect(prompt).toContain('Never include the project name ("Hyperdrive")');
     }
+  });
+
+  it("offers the project's groups only when it has some", () => {
+    const message = "courier map shows stale orders";
+    expect(buildThreadTitlePrompt({ message }).prompt).not.toContain("Thread groups");
+    expect(buildThreadTitlePrompt({ message, groups: ["Courier app", "Admin"] }).prompt).toContain(
+      'Thread groups in this project: ["Courier app","Admin"]',
+    );
+  });
+});
+
+describe("matchThreadGroup", () => {
+  it.each([
+    ["courier APP ", "Courier app"],
+    ["Billing", undefined],
+    [null, undefined],
+  ])("maps %j to %j", (named, expected) => {
+    expect(matchThreadGroup(["Courier app", "Admin"], named)).toBe(expected);
   });
 });

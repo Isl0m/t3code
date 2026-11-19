@@ -70,6 +70,16 @@ export function normalizeThreadGroupName(raw: string): string | null {
   return /[\p{Cc}]/u.test(name) ? null : name;
 }
 
+/** A project's configured group names, cleaned and deduplicated in their configured order. */
+export function normalizeThreadGroups(raw: ReadonlyArray<string>): ReadonlyArray<string> {
+  const groups: string[] = [];
+  for (const entry of raw) {
+    const name = normalizeThreadGroupName(entry);
+    if (name !== null && !groups.includes(name)) groups.push(name);
+  }
+  return groups;
+}
+
 export function threadGroupTags(thread: Pick<SidebarThreadSummary, "source">) {
   return (thread.source.tags ?? []).filter((tag) => normalizeThreadGroupName(tag) === tag);
 }
@@ -102,6 +112,8 @@ export function buildThreadGroupColumns<T extends GroupableThread>(input: {
   readonly mode: ThreadGroupsMode;
   readonly showSettled: boolean;
   readonly query: string;
+  /** Groups set up in project settings; they get a column before any thread joins them. */
+  readonly configuredGroups?: ReadonlyArray<string>;
 }): ReadonlyArray<ThreadGroupColumn<T>> {
   const foldedTokens = foldSearchQuery(input.query).split(" ").filter(Boolean);
   const shown = input.threads
@@ -136,7 +148,7 @@ export function buildThreadGroupColumns<T extends GroupableThread>(input: {
   }
 
   // Every known group keeps its column while a filter empties it, so it stays a place to file into.
-  const groups = collectThreadGroups(input.threads);
+  const groups = collectThreadGroups([...input.threads, { tags: input.configuredGroups ?? [] }]);
   return [
     ...groups.map((group) => ({
       key: `group:${group}`,
