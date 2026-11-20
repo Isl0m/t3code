@@ -56,6 +56,12 @@ function ThreadGroupPicker({ target }: { readonly target: ScopedThreadRef }) {
       environmentId: target.environmentId,
       input: { threadId: target.threadId, tag, tagged },
     }).then(() => undefined);
+  const moveTo = async (tag: string) => {
+    await toggle(tag, true);
+    for (const other of current) {
+      if (other !== tag) await toggle(other, false);
+    }
+  };
 
   const items: CommandPaletteActionItem[] = [
     ...(newName !== null &&
@@ -67,7 +73,7 @@ function ThreadGroupPicker({ target }: { readonly target: ScopedThreadRef }) {
             searchTerms: [query],
             title: `Create group “${newName}”`,
             icon: <FolderPlusIcon className={ITEM_ICON_CLASS} />,
-            run: () => toggle(newName, true),
+            run: () => moveTo(newName),
           },
         ]
       : []),
@@ -87,7 +93,7 @@ function ThreadGroupPicker({ target }: { readonly target: ScopedThreadRef }) {
       ) : (
         <FolderIcon className={ITEM_ICON_CLASS} />
       ),
-      run: () => toggle(group, !current.has(group)),
+      run: () => (current.has(group) ? toggle(group, false) : moveTo(group)),
     })),
   ];
   const foldedQuery = query.trim().toLowerCase();
@@ -108,7 +114,7 @@ function ThreadGroupPicker({ target }: { readonly target: ScopedThreadRef }) {
         aria-label="Group thread"
         autoHighlight="always"
         escapeLabel="Close"
-        footerActionLabel="Toggle group"
+        footerActionLabel="Move to group"
         inputProps={{ placeholder: "Find or create a group…" }}
         mode="none"
         onItemHighlighted={(value) => {
