@@ -2,12 +2,13 @@ import { useAtomValue } from "@effect/atom-react";
 import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
 import { useNavigate } from "@tanstack/react-router";
-import { FolderPlusIcon, SearchIcon } from "lucide-react";
+import { FolderPlusIcon, PinIcon, SearchIcon } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { isCommandPaletteOpen } from "../../commandPaletteBus";
 import { shortcutLabelForCommand } from "../../keybindings";
 import { isEditableFocused } from "../../lib/editableFocus";
+import type { ProviderInstanceEntry } from "../../providerInstances";
 import { cn } from "../../lib/utils";
 import { useDelegatedUnderParent, useQuietThreadShells } from "../../state/entities";
 import { primaryServerKeybindingsAtom } from "../../state/server";
@@ -26,7 +27,15 @@ import {
   resolveThreadLastVisitedAt,
 } from "../Sidebar.logic";
 import { getAppModalReturnThreadTarget } from "../sidebar/mainAppLocation";
-import { ThreadRowLeadingStatus } from "../ThreadStatusIndicators";
+import { getTriggerDisplayModelName } from "../chat/providerIconUtils";
+import { useProviderEntryByEnvironmentAndInstanceId } from "../CommandPaletteThreadItems";
+import type { ProjectFaviconProject } from "../ProjectFavicon";
+import { ThreadCommandSubtitle } from "../ThreadCommandSubtitle";
+import {
+  ThreadRowLeadingStatus,
+  ThreadRowTrailingStatus,
+  ThreadSearchPullRequestNumber,
+} from "../ThreadStatusIndicators";
 import { Button } from "../ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "../ui/input-group";
 import { Kbd } from "../ui/kbd";
@@ -111,6 +120,51 @@ const LEGEND: ReadonlyArray<readonly [string, string]> = [
   ["/", "Search"],
 ];
 
+function ThreadRowMeta(props: {
+  thread: SidebarThreadSummary;
+  project: ProjectFaviconProject | null;
+  projectTitle: string | null;
+  providerEntryByEnvironmentAndInstanceId: ReadonlyMap<string, ProviderInstanceEntry>;
+}) {
+  const { thread } = props;
+  const modelInstanceId = thread.runtime?.providerInstanceId ?? thread.modelSelection.instanceId;
+  const providerEntry =
+    props.providerEntryByEnvironmentAndInstanceId.get(
+      `${thread.environmentId}:${modelInstanceId}`,
+    ) ?? null;
+  const selectedModel = providerEntry?.models.find(
+    (model) => model.slug === thread.modelSelection.model,
+  );
+  const modelLabel = selectedModel
+    ? getTriggerDisplayModelName(selectedModel, providerEntry?.driverKind)
+    : thread.modelSelection.model;
+  return (
+    <span className="flex w-full min-w-0 items-center gap-2 text-xs">
+      <ThreadCommandSubtitle
+        className="min-w-0 shrink"
+        project={props.project}
+        projectTitle={props.projectTitle}
+        branch={thread.branch}
+        worktreePath={thread.worktreePath}
+        isCurrent={false}
+        driverKind={providerEntry?.driverKind ?? null}
+        providerDisplayName={
+          thread.runtime?.providerName ?? providerEntry?.displayName ?? modelInstanceId
+        }
+        acpRegistryAgentId={providerEntry?.acpRegistryAgentId}
+        acpRegistryIconUrl={providerEntry?.acpRegistryIconUrl}
+      />
+      <span className="min-w-0 flex-1 truncate text-muted-foreground/70">{modelLabel}</span>
+      <ThreadSearchPullRequestNumber
+        thread={thread}
+        query={null}
+        settled={thread.settledOverride === "settled"}
+      />
+      <ThreadRowTrailingStatus thread={thread} />
+    </span>
+  );
+}
+
 export function ThreadGroupsPage() {
   const navigate = useNavigate();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
@@ -122,6 +176,7 @@ export function ThreadGroupsPage() {
   const threads = useQuietThreadShells();
   const delegatedUnderParent = useDelegatedUnderParent();
   const { projectByKey } = useProjectLookups();
+  const providerEntryByEnvironmentAndInstanceId = useProviderEntryByEnvironmentAndInstanceId();
   const projectThreadGroups = useProjectThreadGroups();
   const settle = useAtomCommand(threadEnvironment.settle);
   const unsettle = useAtomCommand(threadEnvironment.unsettle);
@@ -476,7 +531,7 @@ export function ThreadGroupsPage() {
                           type="button"
                           aria-current={isSelected ? "true" : undefined}
                           className={cn(
-                            "flex w-full min-w-0 items-center gap-2 px-5 py-1.5 text-start hover:bg-accent/64",
+                            "flex w-full min-w-0 flex-col gap-0.5 px-5 py-1.5 text-start hover:bg-accent/64",
                             isSelected && "bg-accent ring-1 ring-ring/48 ring-inset",
                           )}
                           onClick={() =>
@@ -484,24 +539,40 @@ export function ThreadGroupsPage() {
                           }
                           onDoubleClick={() => openThread(thread)}
                         >
-                          <ThreadRowLeadingStatus thread={thread.shell} />
-                          <span className="min-w-0 flex-1 truncate text-sm">{thread.title}</span>
-                          {otherGroups.map((tag) => (
-                            <span
-                              key={tag}
-                              className="max-w-32 shrink-0 truncate rounded bg-foreground/[0.07] px-1.5 text-2xs text-muted-foreground"
-                            >
-                              {tag}
+                          <span className="flex w-full min-w-0 items-center gap-2">
+                            <ThreadRowLeadingStatus thread={thread.shell} />
+                            <span className="min-w-0 flex-1 truncate text-sm">{thread.title}</span>
+                            {thread.pinned ? (
+                              <PinIcon
+                                aria-label="Pinned"
+                                role="img"
+                                className="size-3 shrink-0 text-muted-foreground/65"
+                              />
+                            ) : null}
+                            {otherGroups.map((tag) => (
+                              <span
+                                key={tag}
+                                className="max-w-32 shrink-0 truncate rounded bg-foreground/[0.07] px-1.5 text-2xs text-muted-foreground"
+                              >
+                                {tag}
+                              </span>
+                            ))}
+                            <span className="w-16 shrink-0 text-end text-muted-foreground text-xs tabular-nums">
+                              {formatRelativeTimeLabel(thread.shell.updatedAt)}
                             </span>
-                          ))}
-                          {scopedProjectKey === null ? (
-                            <span className="max-w-40 shrink-0 truncate text-muted-foreground text-xs">
-                              {thread.projectTitle}
-                            </span>
-                          ) : null}
-                          <span className="w-16 shrink-0 text-end text-muted-foreground text-xs tabular-nums">
-                            {formatRelativeTimeLabel(thread.shell.updatedAt)}
                           </span>
+                          <ThreadRowMeta
+                            thread={thread.shell}
+                            project={
+                              scopedProjectKey === null
+                                ? (projectByKey.get(thread.projectKey) ?? null)
+                                : null
+                            }
+                            projectTitle={scopedProjectKey === null ? thread.projectTitle : null}
+                            providerEntryByEnvironmentAndInstanceId={
+                              providerEntryByEnvironmentAndInstanceId
+                            }
+                          />
                         </button>
                       </li>
                     );
