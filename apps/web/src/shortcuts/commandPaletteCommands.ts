@@ -92,11 +92,6 @@ export function installCommandPaletteCommands(
         dispatchCommandPalette({ _tag: "SetOpen", open: false });
         void router.navigate({ to: "/usage" });
       },
-      "groups.open": (event) => {
-        consume(event);
-        dispatchCommandPalette({ _tag: "SetOpen", open: false });
-        void router.navigate({ to: "/groups" });
-      },
       "commandPalette.toggle": toggleOverlay("commandPalette.toggle"),
       "filePicker.toggle": toggleOverlay("filePicker.toggle"),
       "projectSearch.toggle": toggleOverlay("projectSearch.toggle"),

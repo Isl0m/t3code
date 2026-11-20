@@ -65,7 +65,6 @@ import {
   FileSearchIcon,
   FolderGit2Icon,
   FolderIcon,
-  FolderKanbanIcon,
   FolderPlusIcon,
   MessageSquareDashedIcon,
   LinkIcon,
@@ -1698,18 +1697,6 @@ function OpenCommandPaletteDialog(props: {
     shortcutCommand: "usage.open",
     run: async () => {
       await navigate({ to: "/usage" });
-    },
-  });
-
-  actionItems.push({
-    kind: "action",
-    value: "action:thread-groups",
-    searchTerms: ["groups", "group", "board", "folders", "organize", "threads", "kanban"],
-    title: "Open thread groups",
-    icon: <FolderKanbanIcon className={ITEM_ICON_CLASS} />,
-    shortcutCommand: "groups.open",
-    run: async () => {
-      await navigate({ to: "/groups" });
     },
   });
 

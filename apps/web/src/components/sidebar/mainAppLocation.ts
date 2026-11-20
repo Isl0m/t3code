@@ -4,14 +4,9 @@ import { GUEST_PAGE_PATH } from "../../guestPage";
 import { withoutAssistantCitationHash } from "../../lib/assistantCitationNavigation";
 import { resolveThreadRouteTarget, type ThreadRouteTarget } from "../../threadRoutes";
 
-/** Settings, Usage and Thread groups open as modals over the last main-app view. */
+/** Settings and Usage open as modals over the last main-app view. */
 export function isAppModalPage(pathname: string) {
-  return (
-    pathname === "/settings" ||
-    pathname.startsWith("/settings/") ||
-    pathname === "/usage" ||
-    pathname === "/groups"
-  );
+  return pathname === "/settings" || pathname.startsWith("/settings/") || pathname === "/usage";
 }
 
 export function isSidebarUtilityPage(pathname: string) {

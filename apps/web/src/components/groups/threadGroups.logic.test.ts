@@ -1,32 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  buildThreadGroupColumns,
   collectThreadGroups,
-  type GroupableThread,
-  moveThreadGroupsCursor,
-  NEEDS_YOU_COLUMN_KEY,
+  matchesSidebarGroupFilter,
   normalizeThreadGroupName,
   normalizeThreadGroups,
-  sectionThreads,
-  UNGROUPED_COLUMN_KEY,
+  resolveSidebarGroupFilter,
+  sidebarGroupFilterOptions,
+  UNGROUPED_FILTER,
 } from "./threadGroups.logic";
-
-function thread(overrides: Partial<GroupableThread> & { key: string }): GroupableThread {
-  return {
-    title: overrides.key,
-    tags: [],
-    projectKey: "env:project-a",
-    projectTitle: "Project A",
-    branch: null,
-    bucket: "ready",
-    pinned: false,
-    activityAt: 0,
-    ...overrides,
-  };
-}
-
-const keys = (threads: ReadonlyArray<GroupableThread>) => threads.map((entry) => entry.key);
 
 describe("normalizeThreadGroupName", () => {
   it.each([
@@ -49,156 +31,6 @@ describe("normalizeThreadGroups", () => {
   });
 });
 
-describe("buildThreadGroupColumns", () => {
-  const threads = [
-    thread({ key: "old", tags: ["routes"], activityAt: 1 }),
-    thread({ key: "new", tags: ["routes", "admin"], activityAt: 5 }),
-    thread({ key: "loose", activityAt: 3 }),
-    thread({ key: "done", tags: ["archive-me"], bucket: "settled", activityAt: 9 }),
-  ];
-
-  it("gives each group a column, newest first, with ungrouped threads last", () => {
-    const columns = buildThreadGroupColumns({
-      threads,
-      mode: "group",
-      showSettled: false,
-      query: "",
-    });
-    expect(columns.map((column) => [column.label, keys(column.threads)])).toEqual([
-      ["admin", ["new"]],
-      ["routes", ["new", "old"]],
-      ["Ungrouped", ["loose"]],
-    ]);
-    expect(columns.at(-1)?.key).toBe(UNGROUPED_COLUMN_KEY);
-    expect(columns.at(-1)?.tag).toBeNull();
-  });
-
-  it("gives configured groups a column before any thread joins them", () => {
-    const columns = buildThreadGroupColumns({
-      threads: [thread({ key: "loose" })],
-      mode: "group",
-      showSettled: false,
-      query: "",
-      configuredGroups: ["Bugs"],
-    });
-    expect(columns.map((column) => [column.label, keys(column.threads)])).toEqual([
-      ["Bugs", []],
-      ["Ungrouped", ["loose"]],
-    ]);
-  });
-
-  it("keeps a group's column when the search empties it", () => {
-    const columns = buildThreadGroupColumns({
-      threads,
-      mode: "group",
-      showSettled: true,
-      query: "loose",
-    });
-    expect(columns.map((column) => [column.label, keys(column.threads)])).toEqual([
-      ["admin", []],
-      ["archive-me", []],
-      ["routes", []],
-      ["Ungrouped", ["loose"]],
-    ]);
-  });
-
-  it("drops a group only settled threads carry while settled threads are hidden", () => {
-    const labels = (showSettled: boolean) =>
-      buildThreadGroupColumns({
-        threads: [
-          thread({ key: "old", tags: ["Old area"], bucket: "settled" }),
-          thread({ key: "new", tags: ["Fix"] }),
-        ],
-        mode: "group",
-        showSettled,
-        query: "",
-      }).map((column) => column.label);
-    expect(labels(false)).toEqual(["Fix", "Ungrouped"]);
-    expect(labels(true)).toEqual(["Fix", "Old area", "Ungrouped"]);
-  });
-
-  it("matches the search against group names", () => {
-    const columns = buildThreadGroupColumns({
-      threads,
-      mode: "status",
-      showSettled: true,
-      query: "ADMIN",
-    });
-    expect(columns.flatMap((column) => keys(column.threads))).toEqual(["new"]);
-  });
-
-  it("puts pinned threads first", () => {
-    const columns = buildThreadGroupColumns({
-      threads: [thread({ key: "a", activityAt: 9 }), thread({ key: "b", pinned: true })],
-      mode: "group",
-      showSettled: false,
-      query: "",
-    });
-    expect(keys(columns[0]?.threads ?? [])).toEqual(["b", "a"]);
-  });
-
-  it("orders a group by urgency: needs you, new results, working, then idle", () => {
-    const columns = buildThreadGroupColumns({
-      threads: [
-        thread({ key: "idle", tags: ["g"], activityAt: 9 }),
-        thread({ key: "working", tags: ["g"], bucket: "working", activityAt: 8 }),
-        thread({ key: "unread", tags: ["g"], unread: true, activityAt: 1 }),
-        thread({ key: "asks", tags: ["g"], bucket: "attention", activityAt: 0 }),
-      ],
-      mode: "group",
-      showSettled: false,
-      query: "",
-    });
-    const group = columns[0]?.threads ?? [];
-    expect(keys(group)).toEqual(["asks", "unread", "working", "idle"]);
-    expect(sectionThreads(group).map((section) => section.label)).toEqual([
-      "Needs you",
-      "New results",
-      "Working",
-      "Idle",
-    ]);
-  });
-
-  it("leads with a needs-you column across groups when asked", () => {
-    const columns = buildThreadGroupColumns({
-      threads: [
-        thread({ key: "asks", tags: ["a"], bucket: "attention" }),
-        thread({ key: "unread", tags: ["b"], unread: true }),
-        thread({ key: "idle", tags: ["a"] }),
-      ],
-      mode: "group",
-      showSettled: false,
-      query: "",
-      includeNeedsYou: true,
-    });
-    expect(columns[0]?.key).toBe(NEEDS_YOU_COLUMN_KEY);
-    expect(columns[0]?.tag).toBeNull();
-    expect(keys(columns[0]?.threads ?? [])).toEqual(["asks", "unread"]);
-  });
-
-  it("drops the settled status column while settled threads are hidden", () => {
-    const labels = (showSettled: boolean) =>
-      buildThreadGroupColumns({ threads, mode: "status", showSettled, query: "" }).map(
-        (column) => column.label,
-      );
-    expect(labels(false)).toEqual(["Needs you", "Working", "Ready", "Snoozed"]);
-    expect(labels(true)).toContain("Settled");
-  });
-
-  it("groups by project", () => {
-    const columns = buildThreadGroupColumns({
-      threads: [
-        thread({ key: "a", projectKey: "env:a", projectTitle: "A", activityAt: 1 }),
-        thread({ key: "b", projectKey: "env:b", projectTitle: "B", activityAt: 2 }),
-      ],
-      mode: "project",
-      showSettled: false,
-      query: "",
-    });
-    expect(columns.map((column) => column.label)).toEqual(["B", "A"]);
-  });
-});
-
 describe("collectThreadGroups", () => {
   it("lists each group once, ignoring case when sorting", () => {
     expect(
@@ -207,52 +39,48 @@ describe("collectThreadGroups", () => {
   });
 });
 
-describe("moveThreadGroupsCursor", () => {
-  const columns = buildThreadGroupColumns({
-    threads: [
-      thread({ key: "a1", tags: ["a"], activityAt: 3 }),
-      thread({ key: "a2", tags: ["a"], activityAt: 2 }),
-      thread({ key: "a3", tags: ["a"], activityAt: 1 }),
-      thread({ key: "b1", tags: ["b"] }),
-    ],
-    mode: "group",
-    showSettled: false,
-    query: "",
-  });
-
-  it("starts at the first thread of the first column", () => {
-    expect(moveThreadGroupsCursor(columns, null, "down")).toEqual({
-      columnKey: "group:a",
-      threadKey: "a2",
-    });
-  });
-
-  it("clamps the row when moving into a shorter column", () => {
+describe("sidebarGroupFilterOptions", () => {
+  it("keeps configured order, then other groups active threads use", () => {
     expect(
-      moveThreadGroupsCursor(columns, { columnKey: "group:a", threadKey: "a3" }, "right"),
-    ).toEqual({ columnKey: "group:b", threadKey: "b1" });
+      sidebarGroupFilterOptions({
+        configuredGroups: ["Fix", "Feature"],
+        activeThreadTags: [["Fix"], ["Ad hoc"], ["Feature"]],
+      }),
+    ).toEqual({ groups: ["Fix", "Feature", "Ad hoc"], hasUngrouped: false });
   });
 
-  it("lands on an empty column with no thread selected", () => {
+  it("offers Ungrouped only while an active thread has no group", () => {
     expect(
-      moveThreadGroupsCursor(columns, { columnKey: "group:b", threadKey: "b1" }, "right"),
-    ).toEqual({ columnKey: UNGROUPED_COLUMN_KEY, threadKey: null });
+      sidebarGroupFilterOptions({ configuredGroups: ["Fix"], activeThreadTags: [["Fix"], []] })
+        .hasUngrouped,
+    ).toBe(true);
   });
+});
 
-  it("jumps to a column by number and to the ends of a column", () => {
-    expect(moveThreadGroupsCursor(columns, null, { column: 1 })).toEqual({
-      columnKey: "group:b",
-      threadKey: "b1",
-    });
-    expect(moveThreadGroupsCursor(columns, null, "bottom")).toEqual({
-      columnKey: "group:a",
-      threadKey: "a3",
-    });
+describe("resolveSidebarGroupFilter", () => {
+  const options = { groups: ["Fix", "Check"], hasUngrouped: false };
+
+  it.each([
+    [null, null],
+    ["Fix", "Fix"],
+    ["Courier app", null],
+    [UNGROUPED_FILTER, null],
+  ])("resolves %j to %j", (saved, expected) => {
+    expect(resolveSidebarGroupFilter(saved, options)).toBe(expected);
   });
+});
 
-  it("falls back to the first column when the remembered one is gone", () => {
-    expect(
-      moveThreadGroupsCursor(columns, { columnKey: "group:gone", threadKey: "x" }, "top"),
-    ).toEqual({ columnKey: "group:a", threadKey: "a1" });
+describe("matchesSidebarGroupFilter", () => {
+  const groups = ["Fix", "Check"];
+
+  it.each([
+    [["Fix"], null, true],
+    [["Fix"], "Fix", true],
+    [["Check"], "Fix", false],
+    [[], UNGROUPED_FILTER, true],
+    [["hidden-tag"], UNGROUPED_FILTER, true],
+    [["Fix"], UNGROUPED_FILTER, false],
+  ] as const)("tags %j with filter %j match: %j", (tags, filter, expected) => {
+    expect(matchesSidebarGroupFilter(tags, filter, groups)).toBe(expected);
   });
 });

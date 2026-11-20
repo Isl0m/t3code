@@ -8,7 +8,9 @@ import {
 } from "./chat/threadContextDrag";
 import { discardComposerDraft } from "../lib/discardComposerDraft";
 import { requestCustomSnooze } from "./CustomSnoozeDialog";
+import { SidebarGroupChips } from "./groups/SidebarGroupChips";
 import { openThreadGroupPicker } from "./groups/threadGroupPickerStore";
+import { useSidebarGroupFilter } from "./groups/useSidebarGroupFilter";
 import { useAtomValue } from "@effect/atom-react";
 import * as Option from "effect/Option";
 import { Atom } from "effect/reactivity";
@@ -424,6 +426,8 @@ function useSidebarThreads(input: {
   readonly connectedEnvironmentIds: readonly EnvironmentId[];
   readonly optimisticDrop: SidebarOptimisticDrop | null;
   readonly threads: readonly EnvironmentThreadShell[];
+  // Older settled pages are not loaded under a group filter, so their count would not match it.
+  readonly countsUnloadedSettled: boolean;
   readonly delegatedUnderParent: ReadonlySet<string>;
   readonly routeRowThreadKey: string | null;
   // Set in boring mode: the project groups to fold active threads into, in order.
@@ -438,6 +442,7 @@ function useSidebarThreads(input: {
     connectedEnvironmentIds,
     optimisticDrop,
     threads,
+    countsUnloadedSettled,
     delegatedUnderParent,
     routeRowThreadKey,
     folderGroups,
@@ -504,7 +509,8 @@ function useSidebarThreads(input: {
   const listedSettledThreads = settledThreads.filter(olderSettledShelf.isListed);
   useOlderSettledShelfGrowth(olderSettledShelf, listedSettledThreads);
   const settledCount =
-    settledThreads.length + olderSettledShelf.unloadedCount(partition.visibleThreads);
+    settledThreads.length +
+    (countsUnloadedSettled ? olderSettledShelf.unloadedCount(partition.visibleThreads) : 0);
   const visibleSettledThreads = (() => {
     const visible = listedSettledThreads.slice(0, settledVisibleCount);
     if (
@@ -1179,6 +1185,16 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const scopedProjectGroups = revealWidensScope ? [] : chosenProjectGroups;
   const scopedProjectRefs = scopedProjectGroups.flatMap((project) => project.memberProjectRefs);
   const scopedProjectKeys = revealWidensScope ? null : chosenScopeProjectKeys;
+  const groupFilter = useSidebarGroupFilter({
+    threads: listedThreads,
+    scopedProjectKeys,
+    delegatedUnderParent,
+    projectRefs:
+      scopedProjectRefs.length > 0
+        ? scopedProjectRefs
+        : projectGroups.flatMap((project) => project.memberProjectRefs),
+    routeRowThreadKey,
+  });
   const threadSearch = useThreadSearch(
     connectedEnvironmentIds,
     threadSearchQuery,
@@ -1330,7 +1346,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     serverConfigs,
     connectedEnvironmentIds,
     optimisticDrop,
-    threads: listedThreads,
+    threads: groupFilter.threads,
+    countsUnloadedSettled: !groupFilter.filtering,
     delegatedUnderParent,
     routeRowThreadKey,
     folderGroups: boringSidebarEnabled
@@ -3187,6 +3204,13 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
               activeSearchResultIndex={activeSearchResultIndex}
               onClearSearch={clearThreadSearch}
             />
+            {groupFilter.chips.length > 0 ? (
+              <SidebarGroupChips
+                chips={groupFilter.chips}
+                selected={groupFilter.selected}
+                onSelect={groupFilter.select}
+              />
+            ) : null}
           </SidebarGroup>
         }
       >

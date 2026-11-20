@@ -863,12 +863,11 @@ export function ThreadSearchPullRequestNumber({
   settled = false,
 }: {
   thread: SidebarThreadSummary;
-  // null shows the thread's PR whatever was searched.
-  query: string | null;
+  query: string;
   enabled?: boolean;
   settled?: boolean;
 }) {
-  const matched = query === null || pullRequestMatchesSearchQuery(thread, query);
+  const matched = pullRequestMatchesSearchQuery(thread, query);
   const supportsMultiplePullRequests = useSupportsMultiplePullRequests(thread.environmentId);
   const linked = useLinkedThreadPullRequest(
     thread.environmentId,
@@ -890,8 +889,7 @@ export function ThreadSearchPullRequestNumber({
     current ??
     [thread.linkedPullRequest, thread.branchPullRequest].find(
       (reference) =>
-        reference != null &&
-        (query === null || pullRequestMatchesSearchQuery({ linkedPullRequest: reference }, query)),
+        reference != null && pullRequestMatchesSearchQuery({ linkedPullRequest: reference }, query),
     );
   const presentation = resolveThreadPullRequestBadgePresentation({
     badge,
