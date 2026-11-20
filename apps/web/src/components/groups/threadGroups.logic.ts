@@ -160,8 +160,10 @@ export function buildThreadGroupColumns<T extends GroupableThread>(input: {
   readonly includeNeedsYou?: boolean;
 }): ReadonlyArray<ThreadGroupColumn<T>> {
   const foldedTokens = foldSearchQuery(input.query).split(" ").filter(Boolean);
-  const shown = input.threads
-    .filter((thread) => input.showSettled || thread.bucket !== "settled")
+  const visible = input.threads.filter(
+    (thread) => input.showSettled || thread.bucket !== "settled",
+  );
+  const shown = visible
     .filter((thread) => matchesQuery(thread, foldedTokens))
     .toSorted(bySectionThenPinThenActivity);
 
@@ -191,8 +193,9 @@ export function buildThreadGroupColumns<T extends GroupableThread>(input: {
     }));
   }
 
-  // Every known group keeps its column while a filter empties it, so it stays a place to file into.
-  const groups = collectThreadGroups([...input.threads, { tags: input.configuredGroups ?? [] }]);
+  // A search keeps every group's column so it stays a place to file into; a group only settled
+  // threads still carry drops out until settled threads are shown.
+  const groups = collectThreadGroups([...visible, { tags: input.configuredGroups ?? [] }]);
   return [
     ...(input.includeNeedsYou === true
       ? [

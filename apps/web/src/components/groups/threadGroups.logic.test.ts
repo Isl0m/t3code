@@ -66,7 +66,6 @@ describe("buildThreadGroupColumns", () => {
     });
     expect(columns.map((column) => [column.label, keys(column.threads)])).toEqual([
       ["admin", ["new"]],
-      ["archive-me", []],
       ["routes", ["new", "old"]],
       ["Ungrouped", ["loose"]],
     ]);
@@ -101,6 +100,21 @@ describe("buildThreadGroupColumns", () => {
       ["routes", []],
       ["Ungrouped", ["loose"]],
     ]);
+  });
+
+  it("drops a group only settled threads carry while settled threads are hidden", () => {
+    const labels = (showSettled: boolean) =>
+      buildThreadGroupColumns({
+        threads: [
+          thread({ key: "old", tags: ["Old area"], bucket: "settled" }),
+          thread({ key: "new", tags: ["Fix"] }),
+        ],
+        mode: "group",
+        showSettled,
+        query: "",
+      }).map((column) => column.label);
+    expect(labels(false)).toEqual(["Fix", "Ungrouped"]);
+    expect(labels(true)).toEqual(["Fix", "Old area", "Ungrouped"]);
   });
 
   it("matches the search against group names", () => {

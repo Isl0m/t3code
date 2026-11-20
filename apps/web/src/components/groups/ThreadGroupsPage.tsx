@@ -185,7 +185,7 @@ export function ThreadGroupsPage() {
   const setTag = useAtomCommand(threadEnvironment.setTag);
   const [now] = useState(() => new Date().toISOString());
   const localLastVisitedAt = useUiStateStore((state) => state.threadLastVisitedAtById);
-  const [openedOverProjectKey] = useState(() => {
+  const [openedOverProjectKey, setOpenedOverProjectKey] = useState(() => {
     const target = getAppModalReturnThreadTarget();
     if (target?.kind !== "server") return null;
     const shell = threads.find(
@@ -264,10 +264,12 @@ export function ThreadGroupsPage() {
     setPreferences(next);
     saveThreadGroupsPreferences(next);
   };
-  const setScope = (projectKey: string | null) =>
+  const setScope = (projectKey: string | null) => {
+    setOpenedOverProjectKey(null);
     updatePreferences(
       projectKey === null ? { allProjects: true } : { allProjects: false, projectKey },
     );
+  };
   const moveTo = (next: ThreadGroupsCursor | null) => {
     scrollToKeyRef.current = next?.threadKey ?? null;
     setCursor(next);
@@ -393,7 +395,7 @@ export function ThreadGroupsPage() {
             <SelectTrigger aria-label="Project" size="sm" className="w-auto min-w-36">
               <SelectValue />
             </SelectTrigger>
-            <SelectPopup>
+            <SelectPopup alignItemWithTrigger={false}>
               <SelectItem value={ALL_PROJECTS}>All projects</SelectItem>
               {scopeProjects.map(([projectKey, title]) => (
                 <SelectItem key={projectKey} value={projectKey}>
