@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
 import { useNavigate } from "@tanstack/react-router";
 import { FolderPlusIcon, SearchIcon } from "lucide-react";
@@ -16,13 +16,21 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
 import type { SidebarThreadSummary } from "../../types";
+import { useUiStateStore } from "../../uiStateStore";
 import { AppRouteModal, AppRouteModalClose } from "../AppRouteModal";
 import { useProjectLookups } from "../CommandPaletteLookups";
-import { filterSidebarV2VisibleThreads, resolveSidebarRowStatus } from "../Sidebar.logic";
+import {
+  filterSidebarV2VisibleThreads,
+  hasUnseenCompletion,
+  resolveSidebarRowStatus,
+  resolveThreadLastVisitedAt,
+} from "../Sidebar.logic";
+import { getAppModalReturnThreadTarget } from "../sidebar/mainAppLocation";
 import { ThreadRowLeadingStatus } from "../ThreadStatusIndicators";
 import { Button } from "../ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "../ui/input-group";
 import { Kbd } from "../ui/kbd";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { isThreadGroupPickerOpen, openThreadGroupPicker } from "./threadGroupPickerStore";
@@ -30,11 +38,15 @@ import {
   buildThreadGroupColumns,
   type GroupableThread,
   moveThreadGroupsCursor,
+  NEEDS_YOU_COLUMN_KEY,
+  needsYou,
   resolveThreadGroupsCursor,
+  sectionThreads,
   THREAD_GROUPS_MODES,
   type ThreadGroupsCursor,
   type ThreadGroupsMove,
   threadGroupTags,
+  threadSection,
   type ThreadStatusBucket,
 } from "./threadGroups.logic";
 import {
@@ -43,8 +55,9 @@ import {
 } from "./threadGroupsPreferences";
 import { useProjectThreadGroups } from "./useProjectThreadGroups";
 
-// Columns render this many rows; search narrows the rest, so a 1,000-thread column stays cheap.
+// The list renders this many rows; search narrows the rest, so a 1,000-thread group stays cheap.
 const COLUMN_ROW_LIMIT = 100;
+const ALL_PROJECTS = "__all-projects__";
 const NO_DELEGATED: ReadonlySet<string> = new Set();
 
 interface BoardThread extends GroupableThread {
@@ -84,15 +97,17 @@ const KEY_MOVES: Record<string, ThreadGroupsMove> = {
 };
 
 const LEGEND: ReadonlyArray<readonly [string, string]> = [
-  ["↑↓←→ / hjkl", "Move"],
+  ["j k", "Move"],
+  ["h l", "Prev/next group"],
+  ["0–9", "Jump to group"],
   ["Enter", "Open"],
-  ["g", "Group…"],
-  ["x", "Remove from group"],
+  ["g", "Move to group"],
+  ["x", "Ungroup"],
   ["s", "Settle"],
+  ["⇧S", "Settle idle"],
   ["p", "Pin"],
-  ["1–9", "Column"],
+  ["a", "All projects"],
   ["v", "View"],
-  [".", "Settled"],
   ["/", "Search"],
 ];
 
@@ -114,13 +129,28 @@ export function ThreadGroupsPage() {
   const unpin = useAtomCommand(threadEnvironment.unpin);
   const setTag = useAtomCommand(threadEnvironment.setTag);
   const [now] = useState(() => new Date().toISOString());
+  const localLastVisitedAt = useUiStateStore((state) => state.threadLastVisitedAtById);
+  const [openedOverProjectKey] = useState(() => {
+    const target = getAppModalReturnThreadTarget();
+    if (target?.kind !== "server") return null;
+    const shell = threads.find(
+      (entry) =>
+        entry.environmentId === target.threadRef.environmentId &&
+        entry.id === target.threadRef.threadId,
+    );
+    return shell ? `${shell.environmentId}:${shell.projectId}` : null;
+  });
 
-  const boardThreads: BoardThread[] = filterSidebarV2VisibleThreads(
+  const allBoardThreads: BoardThread[] = filterSidebarV2VisibleThreads(
     threads,
     null,
     delegatedUnderParent ?? NO_DELEGATED,
   ).map((shell) => {
     const project = projectByKey.get(`${shell.environmentId}:${shell.projectId}`);
+    const lastVisitedAt = resolveThreadLastVisitedAt(
+      shell.lastVisitedAt,
+      localLastVisitedAt[scopedThreadKey(scopeThreadRef(shell.environmentId, shell.id))],
+    );
     return {
       key: `${shell.environmentId}:${shell.id}`,
       title: shell.title,
@@ -131,18 +161,42 @@ export function ThreadGroupsPage() {
       bucket: statusBucket(shell, now),
       pinned: shell.pinnedAt != null,
       activityAt: Date.parse(shell.updatedAt) || 0,
+      unread: hasUnseenCompletion({ ...shell, lastVisitedAt }),
       shell,
     };
   });
+  const scopeProjects = [
+    ...new Map(
+      allBoardThreads
+        .toSorted((left, right) => left.projectTitle.localeCompare(right.projectTitle))
+        .map((thread) => [thread.projectKey, thread.projectTitle] as const),
+    ),
+  ];
+  const scopedProjectKey =
+    preferences.allProjects === true
+      ? null
+      : ([openedOverProjectKey, preferences.projectKey].find(
+          (key) => key != null && scopeProjects.some(([projectKey]) => projectKey === key),
+        ) ?? null);
+  const boardThreads =
+    scopedProjectKey === null
+      ? allBoardThreads
+      : allBoardThreads.filter((thread) => thread.projectKey === scopedProjectKey);
   const columns = buildThreadGroupColumns({
     threads: boardThreads,
     mode: preferences.mode,
     showSettled: preferences.showSettled,
     query,
-    configuredGroups: [...projectByKey.values()].flatMap(
-      (project) => projectThreadGroups(project.environmentId, project.id).groups,
-    ),
+    includeNeedsYou: true,
+    configuredGroups: [...projectByKey.values()]
+      .filter(
+        (project) =>
+          scopedProjectKey === null ||
+          `${project.environmentId}:${project.id}` === scopedProjectKey,
+      )
+      .flatMap((project) => projectThreadGroups(project.environmentId, project.id).groups),
   });
+  const leadsWithNeedsYou = columns[0]?.key === NEEDS_YOU_COLUMN_KEY;
   const at = resolveThreadGroupsCursor(columns, cursor);
   const selectedColumn = at === null ? null : (columns[at.column] ?? null);
   const selected =
@@ -155,6 +209,10 @@ export function ThreadGroupsPage() {
     setPreferences(next);
     saveThreadGroupsPreferences(next);
   };
+  const setScope = (projectKey: string | null) =>
+    updatePreferences(
+      projectKey === null ? { allProjects: true } : { allProjects: false, projectKey },
+    );
   const moveTo = (next: ThreadGroupsCursor | null) => {
     scrollToKeyRef.current = next?.threadKey ?? null;
     setCursor(next);
@@ -172,12 +230,17 @@ export function ThreadGroupsPage() {
     void (thread.bucket === "settled"
       ? unsettle({ ...target(thread), input: { ...target(thread).input, reason: "user" } })
       : settle(target(thread)));
+  const settleIdle = () => {
+    for (const thread of selectedColumn?.threads ?? []) {
+      if (threadSection(thread) === "ready") void settle(target(thread));
+    }
+  };
   const togglePinned = (thread: BoardThread) =>
     void (thread.pinned ? unpin(target(thread)) : pin(target(thread)));
-  const removeFromColumnGroup = (thread: BoardThread) => {
-    const tag = selectedColumn?.tag ?? null;
-    if (tag === null) return;
-    void setTag({ ...target(thread), input: { ...target(thread).input, tag, tagged: false } });
+  const removeFromGroup = (thread: BoardThread) => {
+    for (const tag of selectedColumn?.tag != null ? [selectedColumn.tag] : thread.tags) {
+      void setTag({ ...target(thread), input: { ...target(thread).input, tag, tagged: false } });
+    }
   };
 
   const onBoardKeyDown = useEffectEvent((event: KeyboardEvent) => {
@@ -198,7 +261,8 @@ export function ThreadGroupsPage() {
       }
       return;
     }
-    const move = KEY_MOVES[key] ?? (/^[1-9]$/.test(key) ? { column: Number(key) - 1 } : null);
+    const columnNumber = /^[0-9]$/.test(key) ? Number(key) - (leadsWithNeedsYou ? 0 : 1) : -1;
+    const move = KEY_MOVES[key] ?? (columnNumber >= 0 ? { column: columnNumber } : null);
     const handled = (() => {
       if (move !== null) {
         moveTo(moveThreadGroupsCursor(columns, cursor, move));
@@ -218,11 +282,23 @@ export function ThreadGroupsPage() {
         updatePreferences({ showSettled: !preferences.showSettled });
         return true;
       }
+      if (key === "a") {
+        setScope(
+          scopedProjectKey === null
+            ? (openedOverProjectKey ?? preferences.projectKey ?? selected?.projectKey ?? null)
+            : null,
+        );
+        return true;
+      }
+      if (key === "s" && event.shiftKey) {
+        settleIdle();
+        return true;
+      }
       if (selected === null) return false;
       if (key === "enter" || key === "o") openThread(selected);
       else if (key === "g")
         openThreadGroupPicker(scopeThreadRef(selected.shell.environmentId, selected.shell.id));
-      else if (key === "x") removeFromColumnGroup(selected);
+      else if (key === "x") removeFromGroup(selected);
       else if (key === "s") toggleSettled(selected);
       else if (key === "p") togglePinned(selected);
       else return false;
@@ -241,16 +317,36 @@ export function ThreadGroupsPage() {
   }, []);
 
   const groupShortcut = shortcutLabelForCommand(keybindings, "thread.group");
-  const totalShown = new Set(
-    columns.flatMap((column) => column.threads.map((thread) => thread.key)),
-  ).size;
+  const listThreads = selectedColumn?.threads.slice(0, COLUMN_ROW_LIMIT) ?? [];
+  const sections = sectionThreads(listThreads);
 
   return (
     <AppRouteModal label="Thread groups">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-b py-2 ps-5 pe-2">
           <h1 className="font-medium text-sm">Thread groups</h1>
-          <span className="text-muted-foreground text-xs tabular-nums">{totalShown} shown</span>
+          <Select
+            value={scopedProjectKey ?? ALL_PROJECTS}
+            items={{
+              [ALL_PROJECTS]: "All projects",
+              ...Object.fromEntries(scopeProjects),
+            }}
+            onValueChange={(next) =>
+              setScope(typeof next === "string" && next !== ALL_PROJECTS ? next : null)
+            }
+          >
+            <SelectTrigger aria-label="Project" size="sm" className="w-auto min-w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectPopup>
+              <SelectItem value={ALL_PROJECTS}>All projects</SelectItem>
+              {scopeProjects.map(([projectKey, title]) => (
+                <SelectItem key={projectKey} value={projectKey}>
+                  {title}
+                </SelectItem>
+              ))}
+            </SelectPopup>
+          </Select>
           <ToggleGroup
             aria-label="Group threads by"
             variant="segmented"
@@ -271,7 +367,7 @@ export function ThreadGroupsPage() {
               checked={preferences.showSettled}
               onCheckedChange={(checked) => updatePreferences({ showSettled: checked })}
             />
-            Settled
+            Settled (.)
           </label>
           <InputGroup className="ms-auto w-56 min-w-32">
             <InputGroupAddon>
@@ -293,8 +389,8 @@ export function ThreadGroupsPage() {
             disabled={selected === null}
             title={
               groupShortcut
-                ? `Group selected thread (g, ${groupShortcut} in a thread)`
-                : "Group selected thread (g)"
+                ? `Move selected thread to a group (g, ${groupShortcut} in a thread)`
+                : "Move selected thread to a group (g)"
             }
             onClick={() => {
               if (selected)
@@ -309,92 +405,125 @@ export function ThreadGroupsPage() {
           <AppRouteModalClose />
         </header>
 
-        <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-3">
-          {columns.map((column, columnIndex) => (
-            <section
-              key={column.key}
-              aria-label={column.label}
-              className={cn(
-                "flex min-h-0 w-72 shrink-0 flex-col rounded-lg border bg-muted/24",
-                at?.column === columnIndex && "border-ring/48",
-              )}
-            >
-              <header className="flex items-center gap-2 border-b px-3 py-2">
-                {columnIndex < 9 ? <Kbd>{columnIndex + 1}</Kbd> : null}
-                <h2 className="min-w-0 flex-1 truncate font-medium text-sm">{column.label}</h2>
-                <span className="text-muted-foreground text-xs tabular-nums">
-                  {column.threads.length}
-                </span>
-              </header>
-              <ol className="min-h-0 flex-1 space-y-1 overflow-y-auto p-1.5">
-                {column.threads.slice(0, COLUMN_ROW_LIMIT).map((thread, rowIndex) => {
-                  const isSelected = at?.column === columnIndex && at.row === rowIndex;
-                  const otherGroups = thread.tags.filter((tag) => tag !== column.tag);
-                  return (
-                    <li
-                      key={thread.key}
-                      ref={(node) => {
-                        if (node && scrollToKeyRef.current === thread.key && isSelected) {
-                          scrollToKeyRef.current = null;
-                          node.scrollIntoView({ block: "nearest", inline: "nearest" });
-                        }
-                      }}
-                    >
-                      <button
-                        type="button"
-                        aria-current={isSelected ? "true" : undefined}
-                        className={cn(
-                          "flex w-full flex-col gap-1 rounded-md px-2 py-1.5 text-start hover:bg-accent/64",
-                          isSelected && "bg-accent ring-1 ring-ring/48",
-                        )}
-                        onClick={() => moveTo({ columnKey: column.key, threadKey: thread.key })}
-                        onDoubleClick={() => openThread(thread)}
+        <div className="flex min-h-0 flex-1">
+          <nav
+            aria-label="Groups"
+            className="flex w-60 shrink-0 flex-col gap-0.5 overflow-y-auto border-e bg-muted/24 p-2"
+          >
+            {columns.map((column, columnIndex) => {
+              const number = columnIndex + (leadsWithNeedsYou ? 0 : 1);
+              const waiting =
+                column.key === NEEDS_YOU_COLUMN_KEY ? 0 : column.threads.filter(needsYou).length;
+              return (
+                <button
+                  key={column.key}
+                  type="button"
+                  aria-current={at?.column === columnIndex ? "true" : undefined}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-sm hover:bg-accent/64",
+                    at?.column === columnIndex && "bg-accent",
+                    column.key === NEEDS_YOU_COLUMN_KEY && "mb-1",
+                  )}
+                  onClick={() =>
+                    moveTo(moveThreadGroupsCursor(columns, null, { column: columnIndex }))
+                  }
+                >
+                  {number <= 9 ? <Kbd>{number}</Kbd> : <span className="w-5" />}
+                  <span className="min-w-0 flex-1 truncate">{column.label}</span>
+                  {waiting > 0 ? (
+                    <span className="rounded-full bg-warning/16 px-1.5 text-2xs text-warning tabular-nums">
+                      {waiting}
+                    </span>
+                  ) : null}
+                  <span className="text-muted-foreground text-xs tabular-nums">
+                    {column.threads.length}
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
+
+          <section
+            aria-label={selectedColumn?.label ?? "Threads"}
+            className="min-h-0 min-w-0 flex-1 overflow-y-auto py-1"
+          >
+            {sections.map((section) => (
+              <div key={section.key}>
+                <h2 className="flex items-center gap-2 px-5 pt-3 pb-1 font-medium text-2xs text-muted-foreground uppercase tracking-wide">
+                  {section.label}
+                  <span className="tabular-nums">{section.threads.length}</span>
+                  {section.key === "ready" && selectedColumn?.key !== NEEDS_YOU_COLUMN_KEY ? (
+                    <span className="ms-auto flex items-center gap-1.5 normal-case tracking-normal">
+                      <Kbd>⇧S</Kbd> settle all idle
+                    </span>
+                  ) : null}
+                </h2>
+                <ol>
+                  {section.threads.map((thread) => {
+                    const isSelected = selected?.key === thread.key;
+                    const otherGroups = thread.tags.filter((tag) => tag !== selectedColumn?.tag);
+                    return (
+                      <li
+                        key={thread.key}
+                        ref={(node) => {
+                          if (node && scrollToKeyRef.current === thread.key && isSelected) {
+                            scrollToKeyRef.current = null;
+                            node.scrollIntoView({ block: "nearest" });
+                          }
+                        }}
                       >
-                        <span className="flex min-w-0 items-center gap-1.5">
+                        <button
+                          type="button"
+                          aria-current={isSelected ? "true" : undefined}
+                          className={cn(
+                            "flex w-full min-w-0 items-center gap-2 px-5 py-1.5 text-start hover:bg-accent/64",
+                            isSelected && "bg-accent ring-1 ring-ring/48 ring-inset",
+                          )}
+                          onClick={() =>
+                            moveTo({ columnKey: selectedColumn?.key ?? "", threadKey: thread.key })
+                          }
+                          onDoubleClick={() => openThread(thread)}
+                        >
                           <ThreadRowLeadingStatus thread={thread.shell} />
                           <span className="min-w-0 flex-1 truncate text-sm">{thread.title}</span>
-                        </span>
-                        <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground text-xs">
-                          <span className="min-w-0 truncate">
-                            {preferences.mode === "project"
-                              ? (thread.branch ?? "")
-                              : thread.projectTitle}
-                          </span>
-                          <span className="ms-auto shrink-0 tabular-nums">
+                          {otherGroups.map((tag) => (
+                            <span
+                              key={tag}
+                              className="max-w-32 shrink-0 truncate rounded bg-foreground/[0.07] px-1.5 text-2xs text-muted-foreground"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                          {scopedProjectKey === null ? (
+                            <span className="max-w-40 shrink-0 truncate text-muted-foreground text-xs">
+                              {thread.projectTitle}
+                            </span>
+                          ) : null}
+                          <span className="w-16 shrink-0 text-end text-muted-foreground text-xs tabular-nums">
                             {formatRelativeTimeLabel(thread.shell.updatedAt)}
                           </span>
-                        </span>
-                        {otherGroups.length > 0 ? (
-                          <span className="flex flex-wrap gap-1">
-                            {otherGroups.map((tag) => (
-                              <span
-                                key={tag}
-                                className="max-w-full truncate rounded bg-foreground/[0.07] px-1.5 text-2xs text-muted-foreground"
-                              >
-                                {tag}
-                              </span>
-                            ))}
-                          </span>
-                        ) : null}
-                      </button>
-                    </li>
-                  );
-                })}
-                {column.threads.length > COLUMN_ROW_LIMIT ? (
-                  <li className="px-2 py-1.5 text-muted-foreground text-xs">
-                    {column.threads.length - COLUMN_ROW_LIMIT} more. Search to narrow.
-                  </li>
-                ) : null}
-                {column.threads.length === 0 ? (
-                  <li className="px-2 py-1.5 text-muted-foreground text-xs">
-                    {column.tag === null
-                      ? "Nothing here."
-                      : "Empty. Press g on a thread to file it here."}
-                  </li>
-                ) : null}
-              </ol>
-            </section>
-          ))}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </div>
+            ))}
+            {(selectedColumn?.threads.length ?? 0) > COLUMN_ROW_LIMIT ? (
+              <p className="px-5 py-2 text-muted-foreground text-xs">
+                {(selectedColumn?.threads.length ?? 0) - COLUMN_ROW_LIMIT} more. Search to narrow.
+              </p>
+            ) : null}
+            {listThreads.length === 0 ? (
+              <p className="px-5 py-4 text-muted-foreground text-sm">
+                {selectedColumn?.key === NEEDS_YOU_COLUMN_KEY
+                  ? "Nothing is waiting on you."
+                  : selectedColumn?.tag != null
+                    ? "Empty. Press g on a thread to move it here."
+                    : "Nothing here."}
+              </p>
+            ) : null}
+          </section>
         </div>
 
         <footer className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t px-5 py-2 text-muted-foreground text-xs">

@@ -5,8 +5,10 @@ import {
   collectThreadGroups,
   type GroupableThread,
   moveThreadGroupsCursor,
+  NEEDS_YOU_COLUMN_KEY,
   normalizeThreadGroupName,
   normalizeThreadGroups,
+  sectionThreads,
   UNGROUPED_COLUMN_KEY,
 } from "./threadGroups.logic";
 
@@ -119,6 +121,45 @@ describe("buildThreadGroupColumns", () => {
       query: "",
     });
     expect(keys(columns[0]?.threads ?? [])).toEqual(["b", "a"]);
+  });
+
+  it("orders a group by urgency: needs you, new results, working, then idle", () => {
+    const columns = buildThreadGroupColumns({
+      threads: [
+        thread({ key: "idle", tags: ["g"], activityAt: 9 }),
+        thread({ key: "working", tags: ["g"], bucket: "working", activityAt: 8 }),
+        thread({ key: "unread", tags: ["g"], unread: true, activityAt: 1 }),
+        thread({ key: "asks", tags: ["g"], bucket: "attention", activityAt: 0 }),
+      ],
+      mode: "group",
+      showSettled: false,
+      query: "",
+    });
+    const group = columns[0]?.threads ?? [];
+    expect(keys(group)).toEqual(["asks", "unread", "working", "idle"]);
+    expect(sectionThreads(group).map((section) => section.label)).toEqual([
+      "Needs you",
+      "New results",
+      "Working",
+      "Idle",
+    ]);
+  });
+
+  it("leads with a needs-you column across groups when asked", () => {
+    const columns = buildThreadGroupColumns({
+      threads: [
+        thread({ key: "asks", tags: ["a"], bucket: "attention" }),
+        thread({ key: "unread", tags: ["b"], unread: true }),
+        thread({ key: "idle", tags: ["a"] }),
+      ],
+      mode: "group",
+      showSettled: false,
+      query: "",
+      includeNeedsYou: true,
+    });
+    expect(columns[0]?.key).toBe(NEEDS_YOU_COLUMN_KEY);
+    expect(columns[0]?.tag).toBeNull();
+    expect(keys(columns[0]?.threads ?? [])).toEqual(["asks", "unread"]);
   });
 
   it("drops the settled status column while settled threads are hidden", () => {

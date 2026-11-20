@@ -6,6 +6,8 @@ const STORAGE_KEY = "t3code:thread-groups-preferences:v1";
 const ThreadGroupsPreferencesSchema = Schema.Struct({
   mode: Schema.Literals(["group", "status", "project"]),
   showSettled: Schema.Boolean,
+  allProjects: Schema.optional(Schema.Boolean),
+  projectKey: Schema.optional(Schema.String),
 });
 export type ThreadGroupsPreferences = typeof ThreadGroupsPreferencesSchema.Type;
 

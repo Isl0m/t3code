@@ -16,6 +16,8 @@ export interface GroupableThread {
   readonly bucket: ThreadStatusBucket;
   readonly pinned: boolean;
   readonly activityAt: number;
+  /** A finished run whose result the user has not opened yet. */
+  readonly unread?: boolean;
 }
 
 export interface ThreadGroupColumn<T extends GroupableThread> {
@@ -50,6 +52,7 @@ export const THREAD_GROUPS_MODES: ReadonlyArray<{
 ];
 
 export const UNGROUPED_COLUMN_KEY = "ungrouped";
+export const NEEDS_YOU_COLUMN_KEY = "needs-you";
 const MAX_GROUP_NAME_LENGTH = 64;
 
 const STATUS_COLUMNS: ReadonlyArray<{
@@ -94,6 +97,40 @@ export function collectThreadGroups(threads: ReadonlyArray<Pick<GroupableThread,
   );
 }
 
+export type ThreadSectionKey = ThreadStatusBucket | "unread";
+
+const SECTIONS: ReadonlyArray<{ readonly key: ThreadSectionKey; readonly label: string }> = [
+  { key: "attention", label: "Needs you" },
+  { key: "unread", label: "New results" },
+  { key: "working", label: "Working" },
+  { key: "ready", label: "Idle" },
+  { key: "snoozed", label: "Snoozed" },
+  { key: "settled", label: "Settled" },
+];
+
+export function threadSection(thread: GroupableThread): ThreadSectionKey {
+  return thread.bucket === "ready" && thread.unread === true ? "unread" : thread.bucket;
+}
+
+export function needsYou(thread: GroupableThread): boolean {
+  const section = threadSection(thread);
+  return section === "attention" || section === "unread";
+}
+
+/** A column's threads split by status, most urgent first; empty sections are left out. */
+export function sectionThreads<T extends GroupableThread>(
+  threads: ReadonlyArray<T>,
+): ReadonlyArray<{
+  readonly key: ThreadSectionKey;
+  readonly label: string;
+  readonly threads: T[];
+}> {
+  return SECTIONS.map((section) => ({
+    ...section,
+    threads: threads.filter((thread) => threadSection(thread) === section.key),
+  })).filter((section) => section.threads.length > 0);
+}
+
 function matchesQuery(thread: GroupableThread, foldedTokens: ReadonlyArray<string>): boolean {
   if (foldedTokens.length === 0) return true;
   const haystack = foldSearchQuery(
@@ -102,7 +139,12 @@ function matchesQuery(thread: GroupableThread, foldedTokens: ReadonlyArray<strin
   return foldedTokens.every((token) => haystack.includes(token));
 }
 
-function byPinThenActivity(left: GroupableThread, right: GroupableThread): number {
+const sectionRank = (thread: GroupableThread) =>
+  SECTIONS.findIndex((section) => section.key === threadSection(thread));
+
+function bySectionThenPinThenActivity(left: GroupableThread, right: GroupableThread): number {
+  const rank = sectionRank(left) - sectionRank(right);
+  if (rank !== 0) return rank;
   if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
   return right.activityAt - left.activityAt || left.key.localeCompare(right.key);
 }
@@ -114,12 +156,14 @@ export function buildThreadGroupColumns<T extends GroupableThread>(input: {
   readonly query: string;
   /** Groups set up in project settings; they get a column before any thread joins them. */
   readonly configuredGroups?: ReadonlyArray<string>;
+  /** Group mode only: lead with a column of every thread waiting on the user. */
+  readonly includeNeedsYou?: boolean;
 }): ReadonlyArray<ThreadGroupColumn<T>> {
   const foldedTokens = foldSearchQuery(input.query).split(" ").filter(Boolean);
   const shown = input.threads
     .filter((thread) => input.showSettled || thread.bucket !== "settled")
     .filter((thread) => matchesQuery(thread, foldedTokens))
-    .toSorted(byPinThenActivity);
+    .toSorted(bySectionThenPinThenActivity);
 
   if (input.mode === "status") {
     return STATUS_COLUMNS.filter((column) => input.showSettled || column.bucket !== "settled").map(
@@ -150,6 +194,16 @@ export function buildThreadGroupColumns<T extends GroupableThread>(input: {
   // Every known group keeps its column while a filter empties it, so it stays a place to file into.
   const groups = collectThreadGroups([...input.threads, { tags: input.configuredGroups ?? [] }]);
   return [
+    ...(input.includeNeedsYou === true
+      ? [
+          {
+            key: NEEDS_YOU_COLUMN_KEY,
+            label: "Needs you",
+            tag: null,
+            threads: shown.filter(needsYou),
+          },
+        ]
+      : []),
     ...groups.map((group) => ({
       key: `group:${group}`,
       label: group,
