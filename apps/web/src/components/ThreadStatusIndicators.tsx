@@ -363,7 +363,7 @@ function resolveThreadPullRequestBadgePresentation(
         changeRequestTermKind(terminology),
         resolve,
       ),
-      text: badge.layers,
+      text: badge.open > 0 ? badge.open : badge.layers,
     };
   }
   if (number === undefined || url === undefined) return null;
@@ -382,7 +382,7 @@ function resolveThreadPullRequestBadgePresentation(
       Icon: aggregate.Icon,
       toneClassName: aggregate.toneClassName,
       label: moreLinkedBadgeLabel(badge.state, tooltip, badge.others, resolve),
-      text: `+${badge.others + 1}`,
+      text: `+${badge.open > 0 ? badge.open : badge.others + 1}`,
     };
   }
   return {

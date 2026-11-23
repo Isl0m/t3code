@@ -50,6 +50,8 @@ export interface ThreadPullRequestChain {
 
 export type ThreadPullRequestBadge = {
   readonly state: "open" | "closed" | "merged" | "draft";
+  /** Links still open, counting a not-yet-synced link as open like `state` does. */
+  readonly open: number;
 } & (
   | {
       readonly kind: "stack";
@@ -293,6 +295,7 @@ export function makeThreadPullRequests(
     const visible = visibleThreadPullRequests(pullRequests ?? []);
     if (visible.length === 0) return null;
     const states = visible.map((link) => link.snapshot?.state ?? "open");
+    const open = states.filter((entry) => entry === "open").length;
     const state = visible.every((link) => link.snapshot?.state === "open" && link.snapshot.isDraft)
       ? "draft"
       : states.includes("open")
@@ -302,9 +305,9 @@ export function makeThreadPullRequests(
           : "closed";
     const chains = resolveThreadPullRequestChains(visible);
     if (visible.length > 1 && chains.length === 1) {
-      return { kind: "stack", layers: visible.length, state };
+      return { kind: "stack", layers: visible.length, state, open };
     }
-    return { kind: "pull-request", others: visible.length - 1, state };
+    return { kind: "pull-request", others: visible.length - 1, state, open };
   }
 
   /** Older V2 event payloads stored one link; an explicit empty array means it was unlinked. */

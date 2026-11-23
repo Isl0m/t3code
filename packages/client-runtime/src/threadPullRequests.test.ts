@@ -227,6 +227,7 @@ describe("resolveThreadPullRequestChains", () => {
       kind: "stack",
       layers: 5,
       state: "open",
+      open: 5,
     });
   });
 
@@ -350,6 +351,7 @@ describe("chain selection and badge state", () => {
         kind: "stack",
         layers: 2,
         state,
+        open: state === "open" ? 2 : 0,
       });
     },
   );
@@ -379,6 +381,7 @@ describe("chain selection and badge state", () => {
       kind: "stack",
       layers: 2,
       state: "open",
+      open: 1,
     });
   });
 
@@ -389,11 +392,13 @@ describe("chain selection and badge state", () => {
       kind: "stack",
       layers: 2,
       state: "closed",
+      open: 0,
     });
     expect(resolveThreadPullRequestBadge([bottom, top, link(3)])).toEqual({
       kind: "pull-request",
       others: 2,
       state: "open",
+      open: 1,
     });
     expect(resolveThreadPullRequestBadge([link(3, { source: "stack-dismissed" })])).toBeNull();
   });
@@ -429,6 +434,7 @@ describe("chain selection and badge state", () => {
       kind: "pull-request",
       others: 1,
       state: "open",
+      open: 2,
     });
   });
 
