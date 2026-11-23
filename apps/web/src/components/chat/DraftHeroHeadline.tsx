@@ -48,6 +48,7 @@ import { InlineButton } from "../ui/button";
 import { DraftProjectName } from "./DraftProjectName";
 import { DraftHeroProjectHeading } from "./DraftHeroProjectHeading";
 import { TriageDraftHero } from "./TriageDraftHero";
+import { DraftThreadGroupSelect } from "../groups/DraftThreadGroupSelect";
 
 const ADD_PROJECT_VALUE = "add-project";
 
@@ -381,6 +382,15 @@ export function DraftHeroHeadline({
           {isScratchDraft ? projectSelector : orStartWithoutProject}
         </p>
       )}
+      {draftId !== null && activeProject !== null && !isScratchDraft ? (
+        <div className="pointer-events-auto mt-1 flex justify-center">
+          <DraftThreadGroupSelect
+            draftId={draftId}
+            environmentId={activeProject.environmentId}
+            projectId={activeProject.id}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

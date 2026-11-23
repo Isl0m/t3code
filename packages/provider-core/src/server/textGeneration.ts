@@ -69,6 +69,8 @@ export interface ThreadTitleGenerationInput {
   forkSource?: ThreadTitleForkSource | undefined;
   attachments?: ReadonlyArray<ChatAttachment> | undefined;
   instructions?: string | undefined;
+  /** The project's thread groups; when given, the result may name one of them. */
+  groups?: ReadonlyArray<string> | undefined;
   modelSelection: ModelSelection;
   projectId?: ProjectId | null | undefined;
 }
@@ -76,6 +78,7 @@ export interface ThreadTitleGenerationInput {
 export interface ThreadTitleGenerationResult {
   title: string;
   needsRefinement?: boolean | undefined;
+  group?: string | undefined;
 }
 
 export interface ReviewGuideStackLayer {

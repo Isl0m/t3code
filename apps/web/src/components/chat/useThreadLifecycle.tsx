@@ -81,6 +81,7 @@ import { Atom } from "effect/reactivity";
 import { environmentThreadDetails } from "../../state/threads";
 import { type SideThreadOpenIntent, sideThreadKindOf } from "@t3tools/client-runtime/side-thread";
 import { openSideThread, resolveThreadOpenRoute } from "../../lib/sideChatPane";
+import { openThreadGroupPicker } from "../groups/threadGroupPickerStore";
 import type { useLocalDispatchState } from "./useLocalDispatchState";
 const RELATED_THREAD_SHELL_WAIT_MS = 1_000;
 
@@ -736,6 +737,11 @@ export function useThreadLifecycle(input: ThreadLifecycleInput) {
           activeThreadPinned ? m(msg("Failed to unpin thread")) : m(msg("Failed to pin thread")),
         ),
       );
+    },
+    "thread.group": () => {
+      if (!readEnvironmentScope(environmentId, AuthOrchestrationOperateScope)) return false;
+      if (!activeThreadShell || !activeThreadRef || !serverConfigLoaded) return;
+      openThreadGroupPicker(activeThreadRef);
     },
     "thread.regenerateTitle": () => {
       if (!readEnvironmentScope(environmentId, AuthOrchestrationOperateScope)) return false;

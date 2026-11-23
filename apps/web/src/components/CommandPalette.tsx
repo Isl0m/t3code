@@ -257,6 +257,7 @@ import {
 } from "./CommandPaletteAddProject";
 import { useCommandPaletteThreadItems } from "./CommandPaletteThreadItems";
 import { useCommandPaletteThemeItems } from "./CommandPaletteThemeItems";
+import { openThreadGroupPicker } from "./groups/threadGroupPickerStore";
 import {
   PORT_FORWARD_GROUP_PREFIX,
   useCommandPalettePortForwardItem,
@@ -1776,6 +1777,21 @@ function OpenCommandPaletteDialog(props: {
       await navigate({ to: "/usage" });
     },
   });
+
+  if (activeThread) {
+    const groupTarget = scopeThreadRef(activeThread.environmentId, activeThread.id);
+    actionItems.push({
+      kind: "action",
+      value: "action:thread-group",
+      searchTerms: ["group", "add to group", "move to group", "tag", "folder", "organize"],
+      title: gt("Add thread to group…"),
+      icon: <FolderPlusIcon className={ITEM_ICON_CLASS} />,
+      shortcutCommand: "thread.group",
+      run: async () => {
+        openThreadGroupPicker(groupTarget);
+      },
+    });
+  }
 
   for (const direction of [1, -1] as const) {
     const title =

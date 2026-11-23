@@ -1212,8 +1212,21 @@ export const PROJECT_SCOPED_SERVER_SETTING_KEYS = [
   "continueThreadsAfterServerUpdate",
   "responseStreamingMode",
   "speechProjectCustomWords",
+  "threadGroups",
+  "autoAssignThreadGroups",
 ] as const;
 export type ProjectScopedServerSettingKey = (typeof PROJECT_SCOPED_SERVER_SETTING_KEYS)[number];
+
+/** Group names a project offers for its threads. Bad entries drop alone, so a hand edit cannot reset settings. */
+const ThreadGroupsSetting = Schema.Array(Schema.Unknown).pipe(
+  Schema.decodeTo(
+    Schema.Array(Schema.String),
+    SchemaTransformation.transform<ReadonlyArray<string>, ReadonlyArray<unknown>>({
+      decode: (values) => values.filter((value) => typeof value === "string"),
+      encode: (values) => values,
+    }),
+  ),
+);
 
 export const ProjectProviderInstanceOverride = Schema.Struct({
   enabled: Schema.optionalKey(Schema.Boolean),
@@ -1250,6 +1263,8 @@ export const ProjectSettingsOverrides = Schema.Struct({
   continueThreadsAfterServerUpdate: Schema.optionalKey(Schema.Boolean),
   responseStreamingMode: Schema.optionalKey(ResponseStreamingMode),
   speechProjectCustomWords: Schema.optionalKey(SpeechCustomWords),
+  threadGroups: Schema.optionalKey(ThreadGroupsSetting),
+  autoAssignThreadGroups: Schema.optionalKey(Schema.Boolean),
   providerInstances: Schema.optionalKey(
     Schema.Record(ProviderInstanceId, ProjectProviderInstanceOverride),
   ),
@@ -1427,6 +1442,8 @@ export const ServerSettings = Schema.Struct({
   ),
   // Vocabulary shared by everyone who dictates in a project; it lives with the project's environment.
   speechProjectCustomWords: SpeechCustomWords.pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  threadGroups: ThreadGroupsSetting.pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  autoAssignThreadGroups: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   // Null follows textGenerationModelSelection; a selection pins transcript cleanup to its own model.
   speechPostProcessingModelSelection: Schema.NullOr(ModelSelection).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
@@ -1892,6 +1909,8 @@ export const ServerSettingsPatch = Schema.Struct({
   speechAcceleration: Schema.optionalKey(SpeechAcceleration),
   speechModelUnloadTimeout: Schema.optionalKey(SpeechModelUnloadTimeout),
   speechProjectCustomWords: Schema.optionalKey(SpeechCustomWords),
+  threadGroups: Schema.optionalKey(ThreadGroupsSetting),
+  autoAssignThreadGroups: Schema.optionalKey(Schema.Boolean),
   speechPostProcessingModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
   projectAgentBrowserAccessOverrides: Schema.optionalKey(
     Schema.Record(ProjectId, Schema.NullOr(Schema.Boolean)),

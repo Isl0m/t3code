@@ -20,6 +20,7 @@ export type ThreadActionMenuId =
   | "snooze"
   | `snooze:${string}`
   | "unsnooze"
+  | "group"
   | "rename"
   | "regenerate-title"
   | "mark-unread"
@@ -200,6 +201,7 @@ export function buildThreadActionMenuItems(
               },
         ]
       : []),
+    { id: "group", label: resolve(msg("Add to group…")), icon: "folder-plus" },
     {
       id: "rename",
       label: resolve(msg("Rename thread")),

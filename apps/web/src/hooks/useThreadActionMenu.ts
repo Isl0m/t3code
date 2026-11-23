@@ -1,6 +1,7 @@
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { requestCustomSnooze } from "../components/CustomSnoozeDialog";
+import { openThreadGroupPicker } from "../components/groups/threadGroupPickerStore";
 import { openGuestShareDialog } from "../components/chat/guestShareDialogState";
 import {
   type AtomCommandResult,
@@ -269,6 +270,9 @@ export function useThreadActionMenu(input: {
         }
         case "mark-unread":
           markThreadUnread(threadRef);
+          return;
+        case "group":
+          openThreadGroupPicker(threadRef);
           return;
         case "share-guest":
           openGuestShareDialog(threadRef);

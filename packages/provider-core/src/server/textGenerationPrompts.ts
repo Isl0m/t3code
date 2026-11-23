@@ -362,6 +362,7 @@ export interface ThreadTitlePromptInput {
   forkSource?: ThreadTitleForkSource | undefined;
   attachments?: ReadonlyArray<ChatAttachment> | undefined;
   instructions?: string | undefined;
+  groups?: ReadonlyArray<string> | undefined;
 }
 
 /** The thread a fork branched from, and its conversation up to the fork point. */
@@ -513,10 +514,30 @@ export function buildThreadTitlePrompt(input: ThreadTitlePromptInput) {
       input.forkSource === undefined ? "Thread contents" : "Thread contents after the fork";
     prompt = `${regenerateThreadTitlePrompt(input.previousTitle, input.projectTitle, hasInstructions)}${forkSourceSection(input.forkSource)}\n\n${label}:\n${message}${threadTitlePromptSuffix(input)}`;
   }
-  const outputSchema = Schema.Struct({
-    title: Schema.String,
-    needsRefinement: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
-  });
+  const groups = input.groups ?? [];
+  if (groups.length > 0) {
+    prompt += `\n\nThread groups in this project: ${JSON.stringify(groups)}.\nAlso return the key group: the one listed group that best fits the thread's subject, spelled exactly as listed. Return null when none clearly fits; never invent a group.`;
+  }
+  return { prompt, outputSchema: ThreadTitleOutput };
+}
 
-  return { prompt, outputSchema };
+export const ThreadTitleOutput = Schema.Struct({
+  title: Schema.String,
+  needsRefinement: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+});
+
+/** Used in place of the prompt's own schema when the prompt was built with groups. */
+export const ThreadTitleWithGroupOutput = Schema.Struct({
+  ...ThreadTitleOutput.fields,
+  group: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+});
+
+/** The listed group the model named, matched without regard to case; anything else is no group. */
+export function matchThreadGroup(
+  groups: ReadonlyArray<string> | undefined,
+  named: unknown,
+): string | undefined {
+  if (typeof named !== "string") return undefined;
+  const wanted = named.trim().toLocaleLowerCase();
+  return groups?.find((group) => group.toLocaleLowerCase() === wanted);
 }
