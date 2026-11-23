@@ -14,6 +14,7 @@ import { requestCustomSnooze } from "./CustomSnoozeDialog";
 import { SidebarGroupChips } from "./groups/SidebarGroupChips";
 import { openThreadGroupPicker } from "./groups/threadGroupPickerStore";
 import { useSidebarGroupFilter } from "./groups/useSidebarGroupFilter";
+import { adjacentSidebarGroupFilter } from "./groups/threadGroups.logic";
 import { useAtomValue } from "@effect/atom-react";
 import * as Option from "effect/Option";
 import { Atom } from "effect/reactivity";
@@ -1215,6 +1216,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         : projectGroups.flatMap((project) => project.memberProjectRefs),
     routeRowThreadKey,
   });
+  const groupChipValues = groupFilter.chips.map((chip) => chip.value);
+  const selectedGroup = groupFilter.selected;
+  const selectGroup = groupFilter.select;
   const threadSearch = useThreadSearch(
     connectedEnvironmentIds,
     threadSearchQuery,
@@ -2992,6 +2996,19 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
           navigateToThread(scopeThreadRef(targetThread.environmentId, targetThread.id));
         return true;
       };
+      if (command === "sidebar.groupNext" || command === "sidebar.groupPrevious") {
+        if (groupChipValues.length === 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+        selectGroup(
+          adjacentSidebarGroupFilter(
+            groupChipValues,
+            selectedGroup,
+            command === "sidebar.groupNext" ? "next" : "previous",
+          ),
+        );
+        return;
+      }
       const traversalDirection = threadTraversalDirectionFromCommand(command);
       if (traversalDirection !== null) {
         navigateToRowKey(
@@ -3011,12 +3028,15 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     return () => window.removeEventListener("keydown", onWindowKeyDown);
   }, [
     draftIdByRowKey,
+    groupChipValues,
     keybindings,
     navigateToDraft,
     navigateToThread,
     orderedRowKeys,
     routeRowKey,
     routeThreadRef,
+    selectGroup,
+    selectedGroup,
     threadByKey,
   ]);
 

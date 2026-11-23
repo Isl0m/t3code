@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  adjacentSidebarGroupFilter,
   collectThreadGroups,
   matchesSidebarGroupFilter,
   normalizeThreadGroupName,
@@ -67,6 +68,21 @@ describe("resolveSidebarGroupFilter", () => {
     [UNGROUPED_FILTER, null],
   ])("resolves %j to %j", (saved, expected) => {
     expect(resolveSidebarGroupFilter(saved, options)).toBe(expected);
+  });
+});
+
+describe("adjacentSidebarGroupFilter", () => {
+  const values = [null, "Feature", "Fix", UNGROUPED_FILTER];
+
+  it.each([
+    [null, "next", "Feature"],
+    ["Fix", "next", UNGROUPED_FILTER],
+    [UNGROUPED_FILTER, "next", null],
+    [null, "previous", UNGROUPED_FILTER],
+    ["Feature", "previous", null],
+    ["Gone", "next", "Feature"],
+  ] as const)("from %j going %s lands on %j", (selected, direction, expected) => {
+    expect(adjacentSidebarGroupFilter(values, selected, direction)).toBe(expected);
   });
 });
 

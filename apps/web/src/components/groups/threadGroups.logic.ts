@@ -66,6 +66,18 @@ export function resolveSidebarGroupFilter(
   return saved !== null && options.groups.includes(saved) ? saved : null;
 }
 
+/** The chip a next/previous shortcut lands on, wrapping around; All is the null chip. */
+export function adjacentSidebarGroupFilter(
+  values: ReadonlyArray<string | null>,
+  selected: string | null,
+  direction: "previous" | "next",
+): string | null {
+  if (values.length === 0) return selected;
+  const index = Math.max(0, values.indexOf(selected));
+  const step = direction === "next" ? 1 : -1;
+  return values[(index + step + values.length) % values.length] ?? null;
+}
+
 export function matchesSidebarGroupFilter(
   tags: ReadonlyArray<string>,
   filter: string | null,
