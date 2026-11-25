@@ -8,6 +8,7 @@ import {
   normalizeThreadGroups,
   resolveSidebarGroupFilter,
   sidebarGroupFilterOptions,
+  threadGroupMoveSteps,
   UNGROUPED_FILTER,
 } from "./threadGroups.logic";
 
@@ -68,6 +69,25 @@ describe("resolveSidebarGroupFilter", () => {
     [UNGROUPED_FILTER, null],
   ])("resolves %j to %j", (saved, expected) => {
     expect(resolveSidebarGroupFilter(saved, options)).toBe(expected);
+  });
+});
+
+describe("threadGroupMoveSteps", () => {
+  it("drops every other group before adding the new one", () => {
+    expect(threadGroupMoveSteps(["Fix", "Check"], "Feature")).toEqual([
+      { tag: "Fix", tagged: false },
+      { tag: "Check", tagged: false },
+      { tag: "Feature", tagged: true },
+    ]);
+  });
+
+  it.each([
+    [["Fix"], "Fix", []],
+    [["Fix", "Check"], "Fix", [{ tag: "Check", tagged: false }]],
+    [["Fix"], null, [{ tag: "Fix", tagged: false }]],
+    [[], "Fix", [{ tag: "Fix", tagged: true }]],
+  ] as const)("moves %j to %j with %j", (tags, target, expected) => {
+    expect(threadGroupMoveSteps(tags, target)).toEqual(expected);
   });
 });
 

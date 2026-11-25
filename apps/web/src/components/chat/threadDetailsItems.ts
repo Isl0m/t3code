@@ -6,6 +6,7 @@ export const THREAD_DETAILS_ITEMS = [
   { id: "environment", label: msg("Environment and worktree"), defaultVisible: true },
   { id: "openIn", label: msg("Open in editor"), defaultVisible: true },
   { id: "scripts", label: msg("Project scripts"), defaultVisible: true },
+  { id: "group", label: msg("Thread group"), defaultVisible: true },
   { id: "branch", label: msg("Branch and pull request"), defaultVisible: true },
   { id: "gitActions", label: msg("Git actions"), defaultVisible: true },
   {

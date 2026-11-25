@@ -540,6 +540,7 @@ describe("ThreadTitleRegenerationService", () => {
       for (const [key, preset, expectedGroups, expectedTags] of [
         ["picked", [], ["Courier app", "Admin"], ["Courier app"]],
         ["kept", ["Admin"], undefined, ["Admin"]],
+        ["unlisted", ["Old area"], undefined, ["Old area"]],
       ] as const) {
         const harness = makeHarness({
           settings: { threadGroups: ["Courier app", "Admin"], autoAssignThreadGroups: true },

@@ -25,6 +25,7 @@ import {
   type ThreadId,
   ProviderInteractionMode,
   RuntimeMode,
+  THREAD_GROUP_KEYBINDING_COMMANDS,
 } from "@t3tools/contracts";
 import {
   effectiveSnoozed,
@@ -82,6 +83,9 @@ import { environmentThreadDetails } from "../../state/threads";
 import { type SideThreadOpenIntent, sideThreadKindOf } from "@t3tools/client-runtime/side-thread";
 import { openSideThread, resolveThreadOpenRoute } from "../../lib/sideChatPane";
 import { openThreadGroupPicker } from "../groups/threadGroupPickerStore";
+import { threadGroupTags } from "../groups/threadGroups.logic";
+import { useMoveThreadToGroup } from "../groups/useMoveThreadToGroup";
+import { useProjectThreadGroups } from "../groups/useProjectThreadGroups";
 import type { useLocalDispatchState } from "./useLocalDispatchState";
 const RELATED_THREAD_SHELL_WAIT_MS = 1_000;
 
@@ -695,6 +699,23 @@ export function useThreadLifecycle(input: ThreadLifecycleInput) {
       onAction={acknowledgeActiveThreadWokeStable}
     />
   ) : null;
+  const projectThreadGroups = useProjectThreadGroups();
+  const moveThreadToGroup = useMoveThreadToGroup();
+  const moveToGroupShortcuts: ChatShortcutCommands = Object.fromEntries(
+    THREAD_GROUP_KEYBINDING_COMMANDS.map((command, index) => [
+      command,
+      () => {
+        if (!readEnvironmentScope(environmentId, AuthOrchestrationOperateScope)) return false;
+        if (!activeThreadShell || !activeThreadRef || !serverConfigLoaded) return;
+        const group = projectThreadGroups(
+          activeThreadRef.environmentId,
+          activeThreadShell.projectId,
+        ).groups[index];
+        if (group === undefined) return false;
+        void moveThreadToGroup(activeThreadRef, threadGroupTags(activeThreadShell), group);
+      },
+    ]),
+  );
   const toastThreadActionFailure =
     (title: string) => (result: AtomCommandResult<unknown, unknown>) => {
       if (result._tag !== "Failure" || isAtomCommandInterrupted(result)) return;
@@ -743,6 +764,7 @@ export function useThreadLifecycle(input: ThreadLifecycleInput) {
       if (!activeThreadShell || !activeThreadRef || !serverConfigLoaded) return;
       openThreadGroupPicker(activeThreadRef);
     },
+    ...moveToGroupShortcuts,
     "thread.regenerateTitle": () => {
       if (!readEnvironmentScope(environmentId, AuthOrchestrationOperateScope)) return false;
       if (!activeThreadShell || !activeThreadRef || !serverConfigLoaded) return;

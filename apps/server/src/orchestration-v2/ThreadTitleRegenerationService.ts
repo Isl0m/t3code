@@ -73,7 +73,8 @@ function autoAssignGroups(
   const groups = [...new Set(settings.threadGroups.map((group) => group.trim()))].filter(
     isThreadTag,
   );
-  return groups.some((group) => threadTags?.includes(group) === true) ? [] : groups;
+  // Every tag is a group in the client, so any tag means the thread already has its one group.
+  return (threadTags?.length ?? 0) > 0 ? [] : groups;
 }
 
 function failureMessage(cause: Cause.Cause<unknown>): string {

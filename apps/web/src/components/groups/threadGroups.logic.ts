@@ -66,6 +66,20 @@ export function resolveSidebarGroupFilter(
   return saved !== null && options.groups.includes(saved) ? saved : null;
 }
 
+/**
+ * Tag changes that leave a thread in only `target`, or in no group for null. Removals come first so
+ * a failure part-way leaves the thread with fewer groups, never two.
+ */
+export function threadGroupMoveSteps(
+  currentTags: ReadonlyArray<string>,
+  target: string | null,
+): ReadonlyArray<{ readonly tag: string; readonly tagged: boolean }> {
+  return [
+    ...currentTags.filter((tag) => tag !== target).map((tag) => ({ tag, tagged: false })),
+    ...(target !== null && !currentTags.includes(target) ? [{ tag: target, tagged: true }] : []),
+  ];
+}
+
 /** The chip a next/previous shortcut lands on, wrapping around; All is the null chip. */
 export function adjacentSidebarGroupFilter(
   values: ReadonlyArray<string | null>,

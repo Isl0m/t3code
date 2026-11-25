@@ -34,6 +34,19 @@ export const MODEL_PICKER_JUMP_KEYBINDING_COMMANDS = [
 export type ModelPickerJumpKeybindingCommand =
   (typeof MODEL_PICKER_JUMP_KEYBINDING_COMMANDS)[number];
 
+export const THREAD_GROUP_KEYBINDING_COMMANDS = [
+  "thread.moveToGroup.1",
+  "thread.moveToGroup.2",
+  "thread.moveToGroup.3",
+  "thread.moveToGroup.4",
+  "thread.moveToGroup.5",
+  "thread.moveToGroup.6",
+  "thread.moveToGroup.7",
+  "thread.moveToGroup.8",
+  "thread.moveToGroup.9",
+] as const;
+export type ThreadGroupKeybindingCommand = (typeof THREAD_GROUP_KEYBINDING_COMMANDS)[number];
+
 const THREAD_KEYBINDING_COMMANDS = [
   "thread.stop",
   "thread.steerQueuedMessage",
@@ -44,6 +57,7 @@ const THREAD_KEYBINDING_COMMANDS = [
   "thread.settle",
   "thread.pin",
   "thread.group",
+  ...THREAD_GROUP_KEYBINDING_COMMANDS,
   "thread.regenerateTitle",
   "thread.undo",
   ...THREAD_JUMP_KEYBINDING_COMMANDS,

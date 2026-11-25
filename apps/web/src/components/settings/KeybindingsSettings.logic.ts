@@ -535,6 +535,11 @@ export function commandLabel(command: KeybindingCommand, resolve: MessageResolve
   if (raw.startsWith("thread.jump.")) {
     return resolve(msg("Thread: Jump: {n}", { n: raw.slice("thread.jump.".length) }));
   }
+  if (raw.startsWith("thread.moveToGroup.")) {
+    return resolve(
+      msg("Thread: Move to Group {n}", { n: raw.slice("thread.moveToGroup.".length) }),
+    );
+  }
   if (raw.startsWith("modelPicker.jump.")) {
     return resolve(msg("Model Picker: Jump: {n}", { n: raw.slice("modelPicker.jump.".length) }));
   }

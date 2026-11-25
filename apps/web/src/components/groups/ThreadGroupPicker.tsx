@@ -6,8 +6,6 @@ import { useState } from "react";
 
 import { useQuietThreadShell, useQuietThreadShells } from "../../state/entities";
 import { primaryServerKeybindingsAtom } from "../../state/server";
-import { threadEnvironment } from "../../state/threads";
-import { useAtomCommand } from "../../state/use-atom-command";
 import { ITEM_ICON_CLASS, type CommandPaletteActionItem } from "../CommandPalette.logic";
 import { CommandPaletteContent } from "../CommandPaletteContent";
 import { CommandPaletteResults } from "../CommandPaletteResults";
@@ -18,6 +16,7 @@ import {
   threadGroupTags,
 } from "./threadGroups.logic";
 import { closeThreadGroupPicker, useThreadGroupPickerTarget } from "./threadGroupPickerStore";
+import { useMoveThreadToGroup } from "./useMoveThreadToGroup";
 import { useProjectThreadGroups } from "./useProjectThreadGroups";
 
 export function ThreadGroupPickerHost() {
@@ -43,7 +42,7 @@ function ThreadGroupPicker({ target }: { readonly target: ScopedThreadRef }) {
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const thread = useQuietThreadShell(target);
   const threads = useQuietThreadShells();
-  const setTag = useAtomCommand(threadEnvironment.setTag);
+  const moveThreadToGroup = useMoveThreadToGroup();
   const projectThreadGroups = useProjectThreadGroups();
   const projectGroups =
     thread === null ? [] : projectThreadGroups(target.environmentId, thread.projectId).groups;
@@ -51,19 +50,11 @@ function ThreadGroupPicker({ target }: { readonly target: ScopedThreadRef }) {
     threads.map((entry) => ({ tags: threadGroupTags(entry) })),
   ).filter((group) => !projectGroups.includes(group));
   const groups = [...projectGroups, ...otherGroups];
-  const current = new Set(thread === null ? [] : threadGroupTags(thread));
+  const currentTags = thread === null ? [] : threadGroupTags(thread);
+  const current = new Set(currentTags);
   const newName = normalizeThreadGroupName(query);
-  const toggle = (tag: string, tagged: boolean) =>
-    setTag({
-      environmentId: target.environmentId,
-      input: { threadId: target.threadId, tag, tagged },
-    }).then(() => undefined);
-  const moveTo = async (tag: string) => {
-    await toggle(tag, true);
-    for (const other of current) {
-      if (other !== tag) await toggle(other, false);
-    }
-  };
+  const moveTo = (group: string | null) =>
+    moveThreadToGroup(target, currentTags, group).then(() => undefined);
 
   const items: CommandPaletteActionItem[] = [
     ...(newName !== null &&
@@ -95,7 +86,7 @@ function ThreadGroupPicker({ target }: { readonly target: ScopedThreadRef }) {
       ) : (
         <FolderIcon className={ITEM_ICON_CLASS} />
       ),
-      run: () => (current.has(group) ? toggle(group, false) : moveTo(group)),
+      run: () => moveTo(current.has(group) ? null : group),
     })),
   ];
   const foldedQuery = query.trim().toLowerCase();
